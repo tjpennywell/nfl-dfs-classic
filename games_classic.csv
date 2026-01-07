@@ -1,0 +1,7 @@
+Game,Home,Away,Total,Spread_x,Home_IMP,Away_IMP,Game_Tier,Script,Spread_y,Key_Edge,Pace_Note,Spread_str,Spread_Team,Spread_Value,Home_fix,Home_Off_Plays_PG_Home,Home_Off_Plays_PG_Away,Home_Def_Plays_Allowed_PG_Home,Home_Def_Plays_Allowed_PG_Away,Away_fix,Away_Off_Plays_PG_Home,Away_Off_Plays_PG_Away,Away_Def_Plays_Allowed_PG_Home,Away_Def_Plays_Allowed_PG_Away,Pace_Avg,OppPlaysAllowed_Avg,Env_Score
+LAR@CAR,CAR,LAR,44,,,,B,,LAR +2.5,LAR rushing EPA 0.75 vs 0.68,LAR 61.6 (faster),LAR +2.5,LAR,2.5,CAR,59.2,63.6,58.3,58.6,LA,62.2,59.3,68.87729468599034,68.87729468599034,59.25,63.588647342995166,-0.1416859626606014
+SF@PHI,PHI,SF,47,,,,A,,SF +1.5,SF rushing EPA 0.75 vs 0.68,PHI 63.5 (4th fastest),SF +1.5,SF,1.5,PHI,59.5,56.5,64.5,65.5,SF,64.2,64.4,59.4,61.6,61.95,63.05,2.873642422804707
+BUF@JAX,JAX,BUF,44,,,,B,,BUF +3.0,BUF volume advantage,BUF 63.3 (faster),BUF +3.0,BUF,3.0,JAX,64.0,65.3,56.4,64.3,BUF,61.7,65.0,59.2,54.0,64.5,55.2,0.38722657106256064
+HOU@PIT,PIT,HOU,42,,,,C,,HOU +1.0,Collins 16% target share,Even pace,HOU +1.0,HOU,1.0,PIT,56.3,54.8,68.8,67.8,HOU,63.8,65.0,57.3,56.3,60.65,62.55,-0.6269600998797903
+LAC@NE,NE,LAC,41,,,,C,,LAC +3.0,LAC pass EPA 0.14 vs -0.08,Even pace,LAC +3.0,LAC,3.0,NE,63.6,59.8,56.0,57.2,LAC,70.8,57.8,50.7,60.2,60.7,58.1,-2.5435090078586198
+GB@CHI,CHI,GB,42,,,,C,,GB -3.0,CHI fastest pace 66.3,CHI 66.3 (fastest),GB -3.0,GB,-3.0,CHI,62.4,69.0,61.6,57.0,GB,60.7,61.2,58.3,63.3,61.8,62.45,0.05128607653173234
