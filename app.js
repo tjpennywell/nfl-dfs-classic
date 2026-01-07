@@ -11,7 +11,7 @@ function parseCSV(text) {
 }
 
 async function loadCSV(path) {
-  const res = await fetch(path);
+  const res = await fetch(path + "?v=" + Date.now()); // cache-bust
   const text = await res.text();
   return parseCSV(text);
 }
@@ -74,24 +74,29 @@ function guessCol(row, candidates) {
   const games = await loadCSV("data/games_classic.csv");
   const passHm = await loadCSV("data/heatmap_pass_matchup.csv");
   const rushHm = await loadCSV("data/heatmap_rush_proxy.csv");
-  const rushLaneOff = await loadCSV("data/rush_lane_share_off.csv");
-  const rushLaneDef = await loadCSV("data/rush_lane_share_def.csv");
 
-  // Column mapping (best-effort: your exports may have slightly different header names)
-  const pName = guessCol(players[0], ["Name","Player","player_name","PLAYER","PlayerName"]);
-  const pTeam = guessCol(players[0], ["Team","team","Tm"]);
-  const pPos  = guessCol(players[0], ["Pos","Position","position"]);
-  const pSal  = guessCol(players[0], ["Salary","salary","Sal"]);
-  const pProj = guessCol(players[0], ["Proj","Projection","proj","ProjectedPoints","FPTS"]);
-  const pOwn  = guessCol(players[0], ["Own","Ownership","own","ProjectedOwnership"]);
-  const pInj  = guessCol(players[0], ["Injury_Status","injury_status","Status"]);
+  // NEW: Rush lane share files (from matchup workbook)
+  // If these files don't exist, Rush grid will still fail gracefully.
+  let rushLaneOff = [];
+  let rushLaneDef = [];
+  try { rushLaneOff = await loadCSV("data/rush_lane_share_off.csv"); } catch(e) {}
+  try { rushLaneDef = await loadCSV("data/rush_lane_share_def.csv"); } catch(e) {}
 
-  const gHome = guessCol(games[0], ["HomeTeam","Home","home_team"]);
-  const gAway = guessCol(games[0], ["AwayTeam","Away","away_team"]);
-  const gTotal= guessCol(games[0], ["Total","Vegas_Total","vegas_total","Game_Total"]);
-  const gEnv  = guessCol(games[0], ["Env_Score","env_score","EnvScore"]);
+  // Column mapping (best-effort)
+  const pName = guessCol(players[0] || {}, ["Name","Player","player_name","PLAYER","PlayerName"]);
+  const pTeam = guessCol(players[0] || {}, ["Team","team","Tm"]);
+  const pPos  = guessCol(players[0] || {}, ["Pos","Position","position"]);
+  const pSal  = guessCol(players[0] || {}, ["Salary","salary","Sal"]);
+  const pProj = guessCol(players[0] || {}, ["Proj","Projection","proj","ProjectedPoints","FPTS"]);
+  const pOwn  = guessCol(players[0] || {}, ["Own","Ownership","own","ProjectedOwnership"]);
+  const pInj  = guessCol(players[0] || {}, ["Injury_Status","injury_status","Status"]);
 
-  // Populate filters
+  const gHome = guessCol(games[0] || {}, ["HomeTeam","Home","home_team"]);
+  const gAway = guessCol(games[0] || {}, ["AwayTeam","Away","away_team"]);
+  const gTotal= guessCol(games[0] || {}, ["Total","Vegas_Total","vegas_total","Game_Total"]);
+  const gEnv  = guessCol(games[0] || {}, ["Env_Score","env_score","EnvScore"]);
+
+  // Populate team filter
   const teamSel = document.getElementById("teamFilter");
   uniq(players.map(p => p[pTeam]).filter(Boolean)).sort().forEach(t=>{
     const opt = document.createElement("option");
@@ -117,9 +122,7 @@ function guessCol(row, candidates) {
 
   // Players table rendering
   const playersTable = document.getElementById("playersTable");
-  const playerHeaders = [
-    pName, pTeam, pPos, pSal, pProj, pOwn, pInj
-  ].filter(Boolean);
+  const playerHeaders = [pName, pTeam, pPos, pSal, pProj, pOwn, pInj].filter(Boolean);
 
   function filteredPlayers() {
     const q = (document.getElementById("playerSearch").value || "").toLowerCase();
@@ -162,42 +165,49 @@ function guessCol(row, candidates) {
   });
   renderPlayers();
 
-  
-  // ===== Rush 7-lane maps (Off share vs Def allowed share) =====
+  // ===== Heatmaps =====
+  const heatTable = document.getElementById("heatmapTable");
+  let currentHm = "pass";
+
+  // Rush 7 lanes setup (team -> lane -> share)
   const laneOrder = ["left_end","left_tackle","left_guard","center","right_guard","right_tackle","right_end"];
 
-  const rushOffMap = {}; // team -> lane -> share
+  const rushOffMap = {};
   rushLaneOff.forEach(r=>{
     const t = r.off_team;
     if (!rushOffMap[t]) rushOffMap[t] = {};
     rushOffMap[t][r.lane] = num(r.off_rush_share);
   });
 
-  const rushDefMap = {}; // team -> lane -> allowed share
+  const rushDefMap = {};
   rushLaneDef.forEach(r=>{
     const t = r.def_team;
     if (!rushDefMap[t]) rushDefMap[t] = {};
     rushDefMap[t][r.lane] = num(r.def_rush_share_allowed);
   });
 
-  // Precompute global edge min/max across all matchups for consistent coloring
   const teamsAll = uniq(Object.keys(rushOffMap).concat(Object.keys(rushDefMap))).sort();
-  let edgeMin = Infinity, edgeMax = -Infinity;
-  teamsAll.forEach(offT=>{
-    teamsAll.forEach(defT=>{
-      laneOrder.forEach(l=>{
-        const v = (rushOffMap[offT]?.[l] ?? 0) - (rushDefMap[defT]?.[l] ?? 0);
-        if (v < edgeMin) edgeMin = v;
-        if (v > edgeMax) edgeMax = v;
+
+  let edgeMin = -1, edgeMax = 1;
+  if (teamsAll.length) {
+    edgeMin = Infinity; edgeMax = -Infinity;
+    teamsAll.forEach(offT=>{
+      teamsAll.forEach(defT=>{
+        laneOrder.forEach(l=>{
+          const v = (rushOffMap[offT]?.[l] ?? 0) - (rushDefMap[defT]?.[l] ?? 0);
+          edgeMin = Math.min(edgeMin, v);
+          edgeMax = Math.max(edgeMax, v);
+        });
       });
     });
-  });
+  }
 
-  // Create Rush controls (off/def/metric) dynamically under Heatmaps card
+  // Add Rush controls (only if lane files exist)
   const heatCard = document.getElementById("heatmapTable").closest(".card");
   const ctrlRow = document.createElement("div");
   ctrlRow.className = "row";
   ctrlRow.id = "rushCtrlRow";
+  ctrlRow.style.display = "none";
 
   const offSel = document.createElement("select");
   offSel.id = "rushOffTeam";
@@ -213,26 +223,24 @@ function guessCol(row, candidates) {
 
   function fillTeamSelect(sel) {
     sel.innerHTML = "";
-    teamsAll.forEach(t=>{
+    (teamsAll.length ? teamsAll : [""]).forEach(t=>{
       const o = document.createElement("option");
-      o.value = t; o.textContent = t;
+      o.value = t; o.textContent = t || "—";
       sel.appendChild(o);
     });
   }
   fillTeamSelect(offSel);
   fillTeamSelect(defSel);
 
-  // Default to primary game teams (from the top Env game)
-  const defaultGame = gamesSorted[0];
-  offSel.value = defaultGame[gAway] || teamsAll[0];
-  defSel.value = defaultGame[gHome] || teamsAll[0];
+  // Default selection: top Env game teams if possible
+  const defaultGame = gamesSorted[0] || {};
+  if (teamsAll.length) {
+    offSel.value = defaultGame[gAway] || teamsAll[0];
+    defSel.value = defaultGame[gHome] || teamsAll[0];
+  }
 
-  const offLabel = document.createElement("span");
-  offLabel.textContent = "Off:";
-  offLabel.style.opacity = "0.8";
-  const defLabel = document.createElement("span");
-  defLabel.textContent = "Def:";
-  defLabel.style.opacity = "0.8";
+  const offLabel = document.createElement("span"); offLabel.textContent = "Off:"; offLabel.style.opacity = "0.8";
+  const defLabel = document.createElement("span"); defLabel.textContent = "Def:"; defLabel.style.opacity = "0.8";
 
   ctrlRow.appendChild(offLabel);
   ctrlRow.appendChild(offSel);
@@ -240,196 +248,13 @@ function guessCol(row, candidates) {
   ctrlRow.appendChild(defSel);
   ctrlRow.appendChild(metricSel);
 
-  // Insert controls just before heatmap table
   heatCard.insertBefore(ctrlRow, document.getElementById("heatmapTable"));
-// Heatmaps toggle
-  const heatTable = document.getElementById("heatmapTable");
-  let currentHm = "pass";
 
   function renderHeatmap() {
     if (currentHm === "pass") {
-      const edgeCol = guessCol(passHm[0], ["edge_off_minus_def","Edge","edge"]);
-      const teamCol = guessCol(passHm[0], ["off_team","Team","team"]);
-      const oppCol  = guessCol(passHm[0], ["def_team","Opponent","opp"]);
-      const locCol  = guessCol(passHm[0], ["location","Location","loc"]);
-      const depthCol= guessCol(passHm[0], ["depth","Depth","dep"]);
-      const edges = passHm.map(r=>num(r[edgeCol]));
-      const mn = Math.min(...edges), mx = Math.max(...edges);
-      const headers = [teamCol, oppCol, depthCol, locCol, edgeCol].filter(Boolean);
-      setTable(heatTable, headers, passHm.slice(0,300), (td,row,h)=>{
-        if (h === edgeCol) {
-          const v = num(row[h]);
-          td.textContent = v.toFixed(3);
-          td.style.backgroundColor = getColor(v, mn, mx);
-        }
-      });
-      // show rush controls row? hide it
-      const rr = document.getElementById("rushCtrlRow");
-      if (rr) rr.style.display = "none";
-    } else {
-      // Rush 7-lane GRID (Left End → Right End)
-      const rr = document.getElementById("rushCtrlRow");
-      if (rr) rr.style.display = "flex";
+      ctrlRow.style.display = "none";
 
-      const offT = document.getElementById("rushOffTeam").value;
-      const defT = document.getElementById("rushDefTeam").value;
-      const metric = document.getElementById("rushMetric").value;
-
-      const row = {};
-      row["off_team"] = offT;
-      row["def_team"] = defT;
-
-      laneOrder.forEach(l=>{
-        const offV = (rushOffMap[offT]?.[l] ?? 0);
-        const defV = (rushDefMap[defT]?.[l] ?? 0);
-        let v = 0;
-        if (metric === "edge") v = offV - defV;
-        if (metric === "off") v = offV;
-        if (metric === "def") v = defV;
-        row[l] = v;
-      });
-
-      const headers = ["off_team","def_team", ...laneOrder.map(l=>l.replace("_"," ").replace("_"," "))];
-      // Build a display row with human lane names
-      const displayRow = { "off_team": offT, "def_team": defT };
-      laneOrder.forEach(l=>{
-        const key = l.replace("_"," ").replace("_"," ");
-        displayRow[key] = (row[l]).toFixed(2);
-      });
-
-      setTable(heatTable, headers, [displayRow], (td,r,h)=>{
-        if (laneOrder.map(l=>l.replace("_"," ").replace("_"," ")).includes(h)) {
-          const lane = h.replace(" ","_").replace(" ","_");
-          // map back to laneOrder: since we replaced underscores, reconstruct
-          const laneKey = lane;
-          const offV = (rushOffMap[offT]?.[laneKey] ?? 0);
-          const defV = (rushDefMap[defT]?.[laneKey] ?? 0);
-          let v = 0;
-          if (metric === "edge") v = offV - defV;
-          if (metric === "off") v = offV;
-          if (metric === "def") v = defV;
-
-          // Coloring:
-          if (metric === "edge") td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
-          else td.style.backgroundColor = `rgba(255,255,255, ${Math.min(Math.max(v/35,0),0.35)})`;
-        }
-      });
-    }
-  }
-document.getElementById("showPassHm").addEventListener("click", ()=>{currentHm="pass"; renderHeatmap();});
-  document.getElementById("showRushHm").addEventListener("click", ()=>{currentHm="rush"; renderHeatmap();});
-  renderHeatmap();
-
-  ["rushOffTeam","rushDefTeam","rushMetric"].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("change", renderHeatmap);
-  });
-
-
-  // Classic lineup builder (simple + injury-aware)
-  function isOut(p) {
-    const s = (p[pInj]||"").toUpperCase();
-    return s.includes("OUT");
-  }
-
-  function topBy(rows, col, n=1, filterFn=null) {
-    let r = rows;
-    if (filterFn) r = r.filter(filterFn);
-    return r.sort((a,b)=>num(b[col])-num(a[col])).slice(0,n);
-  }
-
-  function buildClassic() {
-    const idx = parseInt(primarySelect.value, 10) || 0;
-    const g = gamesSorted[idx];
-    const home = g[gHome], away = g[gAway];
-
-    // Pick QB from primary game: choose higher projected QB between the two teams if possible
-    const qbs = players.filter(p => (p[pPos]==="QB") && (p[pTeam]===home || p[pTeam]===away) && !isOut(p));
-    const qb = topBy(qbs, pProj, 1)[0];
-
-    // If no QB found, bail gracefully
-    if (!qb) return { players: [], meta: { note:"No QB found in primary game." } };
-
-    const qbTeam = qb[p[pTeam]];
-    const oppTeam = qbTeam === home ? away : home;
-
-    // 2 pass-catchers from QB team (WR/TE), best projected, not OUT
-    const passCatchers = topBy(
-      players.filter(p => (p[pTeam]===qbTeam) && ["WR","TE"].includes(p[pPos]) && !isOut(p)),
-      pProj,
-      2
-    );
-
-    // Bring-back best projected RB/WR/TE from opponent, not OUT
-    const bringBack = topBy(
-      players.filter(p => (p[pTeam]===oppTeam) && ["RB","WR","TE"].includes(p[pPos]) && !isOut(p)),
-      pProj,
-      1
-    )[0];
-
-    // Fill remaining spots with best values (proj per $), RB-heavy flex preference
-    const chosen = [qb, ...passCatchers, bringBack].filter(Boolean);
-    const chosenNames = new Set(chosen.map(p=>p[pName]));
-
-    const pool = players
-      .filter(p => !chosenNames.has(p[pName]) && !isOut(p))
-      .map(p => {
-        const proj = num(p[pProj]);
-        const sal = num(p[pSal]);
-        const value = sal ? proj/(sal/1000) : 0;
-        return { ...p, __value: value };
-      });
-
-    // Prioritize RBs for remaining FLEX-ish spots, then best value overall
-    const rbs = pool.filter(p=>p[pPos]==="RB").sort((a,b)=>b.__value-a.__value);
-    const others = pool.filter(p=>p[pPos]!=="RB").sort((a,b)=>b.__value-a.__value);
-
-    // We won't enforce exact DFS roster constraints here; just produce a "recommended core + fills"
-    const fills = [...rbs.slice(0,2), ...others.slice(0,3)].slice(0,5);
-
-    const final = [...chosen, ...fills].slice(0,9); // typical DK classic roster size
-    const salary = final.reduce((s,p)=>s+num(p[pSal]),0);
-    const proj = final.reduce((s,p)=>s+num(p[pProj]),0);
-
-    return {
-      players: final,
-      meta: {
-        primaryGame: `${away} @ ${home}`,
-        env: num(g[gEnv]).toFixed(2),
-        salary,
-        proj: proj.toFixed(2),
-        qbTeam,
-        bringBackTeam: oppTeam
-      }
-    };
-  }
-
-  const lineupTable = document.getElementById("lineupTable");
-  const lineupSummary = document.getElementById("lineupSummary");
-
-  function renderLineup(result) {
-    const meta = result.meta || {};
-    lineupSummary.innerHTML = `
-      <div class="pill"><b>Primary:</b> ${meta.primaryGame || "-"}</div>
-      <div class="pill"><b>Env:</b> ${meta.env || "-"}</div>
-      <div class="pill"><b>Proj:</b> ${meta.proj || "-"}</div>
-      <div class="pill"><b>Salary:</b> ${meta.salary || "-"}</div>
-      <div class="pill"><b>QB Team:</b> ${meta.qbTeam || "-"}</div>
-      <div class="pill"><b>Bring-back:</b> ${meta.bringBackTeam || "-"}</div>
-    `;
-
-    const headers = [pPos, pName, pTeam, pSal, pProj, pOwn, pInj].filter(Boolean);
-    setTable(lineupTable, headers, result.players, (td,row,h)=>{
-      if (h === pProj) td.innerHTML = `<span class="badge">${num(row[h]).toFixed(2)}</span>`;
-      if (h === pInj && (row[h]||"").toUpperCase().includes("OUT")) td.innerHTML = `<span class="badge">OUT</span>`;
-    });
-  }
-
-  document.getElementById("buildLineupBtn").addEventListener("click", ()=>{
-    const result = buildClassic();
-    renderLineup(result);
-  });
-
-  // Auto-build once on load
-  renderLineup(buildClassic());
-})();
+      const edgeCol = guessCol(passHm[0] || {}, ["edge_off_minus_def","Edge","edge"]);
+      const teamCol = guessCol(passHm[0] || {}, ["off_team","Team","team"]);
+      const oppCol  = guessCol(passHm[0] || {}, ["def_team","Opponent","opp"]);
+      const locCol  = guessCol(passHm[0]
