@@ -74,6 +74,8 @@ function guessCol(row, candidates) {
   const games = await loadCSV("data/games_classic.csv");
   const passHm = await loadCSV("data/heatmap_pass_matchup.csv");
   const rushHm = await loadCSV("data/heatmap_rush_proxy.csv");
+  const rushLaneOff = await loadCSV("data/rush_lane_share_off.csv");
+  const rushLaneDef = await loadCSV("data/rush_lane_share_def.csv");
 
   // Column mapping (best-effort: your exports may have slightly different header names)
   const pName = guessCol(players[0], ["Name","Player","player_name","PLAYER","PlayerName"]);
@@ -160,7 +162,87 @@ function guessCol(row, candidates) {
   });
   renderPlayers();
 
-  // Heatmaps toggle
+  
+  // ===== Rush 7-lane maps (Off share vs Def allowed share) =====
+  const laneOrder = ["left_end","left_tackle","left_guard","center","right_guard","right_tackle","right_end"];
+
+  const rushOffMap = {}; // team -> lane -> share
+  rushLaneOff.forEach(r=>{
+    const t = r.off_team;
+    if (!rushOffMap[t]) rushOffMap[t] = {};
+    rushOffMap[t][r.lane] = num(r.off_rush_share);
+  });
+
+  const rushDefMap = {}; // team -> lane -> allowed share
+  rushLaneDef.forEach(r=>{
+    const t = r.def_team;
+    if (!rushDefMap[t]) rushDefMap[t] = {};
+    rushDefMap[t][r.lane] = num(r.def_rush_share_allowed);
+  });
+
+  // Precompute global edge min/max across all matchups for consistent coloring
+  const teamsAll = uniq(Object.keys(rushOffMap).concat(Object.keys(rushDefMap))).sort();
+  let edgeMin = Infinity, edgeMax = -Infinity;
+  teamsAll.forEach(offT=>{
+    teamsAll.forEach(defT=>{
+      laneOrder.forEach(l=>{
+        const v = (rushOffMap[offT]?.[l] ?? 0) - (rushDefMap[defT]?.[l] ?? 0);
+        if (v < edgeMin) edgeMin = v;
+        if (v > edgeMax) edgeMax = v;
+      });
+    });
+  });
+
+  // Create Rush controls (off/def/metric) dynamically under Heatmaps card
+  const heatCard = document.getElementById("heatmapTable").closest(".card");
+  const ctrlRow = document.createElement("div");
+  ctrlRow.className = "row";
+  ctrlRow.id = "rushCtrlRow";
+
+  const offSel = document.createElement("select");
+  offSel.id = "rushOffTeam";
+  const defSel = document.createElement("select");
+  defSel.id = "rushDefTeam";
+  const metricSel = document.createElement("select");
+  metricSel.id = "rushMetric";
+  metricSel.innerHTML = `
+    <option value="edge">Edge (Off share − Def allowed share)</option>
+    <option value="off">Off rush share (by lane)</option>
+    <option value="def">Def allowed share (by lane)</option>
+  `;
+
+  function fillTeamSelect(sel) {
+    sel.innerHTML = "";
+    teamsAll.forEach(t=>{
+      const o = document.createElement("option");
+      o.value = t; o.textContent = t;
+      sel.appendChild(o);
+    });
+  }
+  fillTeamSelect(offSel);
+  fillTeamSelect(defSel);
+
+  // Default to primary game teams (from the top Env game)
+  const defaultGame = gamesSorted[0];
+  offSel.value = defaultGame[gAway] || teamsAll[0];
+  defSel.value = defaultGame[gHome] || teamsAll[0];
+
+  const offLabel = document.createElement("span");
+  offLabel.textContent = "Off:";
+  offLabel.style.opacity = "0.8";
+  const defLabel = document.createElement("span");
+  defLabel.textContent = "Def:";
+  defLabel.style.opacity = "0.8";
+
+  ctrlRow.appendChild(offLabel);
+  ctrlRow.appendChild(offSel);
+  ctrlRow.appendChild(defLabel);
+  ctrlRow.appendChild(defSel);
+  ctrlRow.appendChild(metricSel);
+
+  // Insert controls just before heatmap table
+  heatCard.insertBefore(ctrlRow, document.getElementById("heatmapTable"));
+// Heatmaps toggle
   const heatTable = document.getElementById("heatmapTable");
   let currentHm = "pass";
 
@@ -181,27 +263,68 @@ function guessCol(row, candidates) {
           td.style.backgroundColor = getColor(v, mn, mx);
         }
       });
+      // show rush controls row? hide it
+      const rr = document.getElementById("rushCtrlRow");
+      if (rr) rr.style.display = "none";
     } else {
-      const edgeCol = guessCol(rushHm[0], ["edge_success_off_minus_defproxy","Edge","edge"]);
-      const teamCol = guessCol(rushHm[0], ["off_team","Team","team"]);
-      const oppCol  = guessCol(rushHm[0], ["def_team","Opponent","opp"]);
-      const dirCol  = guessCol(rushHm[0], ["direction","Direction","dir"]);
-      const edges = rushHm.map(r=>num(r[edgeCol]));
-      const mn = Math.min(...edges), mx = Math.max(...edges);
-      const headers = [teamCol, oppCol, dirCol, edgeCol].filter(Boolean);
-      setTable(heatTable, headers, rushHm.slice(0,200), (td,row,h)=>{
-        if (h === edgeCol) {
-          const v = num(row[h]);
-          td.textContent = v.toFixed(3);
-          td.style.backgroundColor = getColor(v, mn, mx);
+      // Rush 7-lane GRID (Left End → Right End)
+      const rr = document.getElementById("rushCtrlRow");
+      if (rr) rr.style.display = "flex";
+
+      const offT = document.getElementById("rushOffTeam").value;
+      const defT = document.getElementById("rushDefTeam").value;
+      const metric = document.getElementById("rushMetric").value;
+
+      const row = {};
+      row["off_team"] = offT;
+      row["def_team"] = defT;
+
+      laneOrder.forEach(l=>{
+        const offV = (rushOffMap[offT]?.[l] ?? 0);
+        const defV = (rushDefMap[defT]?.[l] ?? 0);
+        let v = 0;
+        if (metric === "edge") v = offV - defV;
+        if (metric === "off") v = offV;
+        if (metric === "def") v = defV;
+        row[l] = v;
+      });
+
+      const headers = ["off_team","def_team", ...laneOrder.map(l=>l.replace("_"," ").replace("_"," "))];
+      // Build a display row with human lane names
+      const displayRow = { "off_team": offT, "def_team": defT };
+      laneOrder.forEach(l=>{
+        const key = l.replace("_"," ").replace("_"," ");
+        displayRow[key] = (row[l]).toFixed(2);
+      });
+
+      setTable(heatTable, headers, [displayRow], (td,r,h)=>{
+        if (laneOrder.map(l=>l.replace("_"," ").replace("_"," ")).includes(h)) {
+          const lane = h.replace(" ","_").replace(" ","_");
+          // map back to laneOrder: since we replaced underscores, reconstruct
+          const laneKey = lane;
+          const offV = (rushOffMap[offT]?.[laneKey] ?? 0);
+          const defV = (rushDefMap[defT]?.[laneKey] ?? 0);
+          let v = 0;
+          if (metric === "edge") v = offV - defV;
+          if (metric === "off") v = offV;
+          if (metric === "def") v = defV;
+
+          // Coloring:
+          if (metric === "edge") td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
+          else td.style.backgroundColor = `rgba(255,255,255, ${Math.min(Math.max(v/35,0),0.35)})`;
         }
       });
     }
   }
-
-  document.getElementById("showPassHm").addEventListener("click", ()=>{currentHm="pass"; renderHeatmap();});
+document.getElementById("showPassHm").addEventListener("click", ()=>{currentHm="pass"; renderHeatmap();});
   document.getElementById("showRushHm").addEventListener("click", ()=>{currentHm="rush"; renderHeatmap();});
   renderHeatmap();
+
+  ["rushOffTeam","rushDefTeam","rushMetric"].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", renderHeatmap);
+  });
+
 
   // Classic lineup builder (simple + injury-aware)
   function isOut(p) {
