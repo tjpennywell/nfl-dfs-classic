@@ -4,20 +4,56 @@
   <meta charset="UTF-8" />
   <title>NFL DFS Classic Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
-  <h1>NFL DFS Classic Dashboard</h1>
-  <div id="versionStamp"></div>
+  <header class="top">
+    <div>
+      <h1>NFL DFS Classic</h1>
+      <div id="versionStamp" class="version"></div>
+    </div>
 
-  <hr />
+    <div class="miniNote">
+      Cache-bust is handled by the script tag version + no-store CSV fetch.
+    </div>
+  </header>
 
-  <h2>Rush Matchup Heatmap</h2>
-  <div id="rushHeatmap"></div>
+  <main class="grid">
 
-  <!-- ✅ SCRIPT TAG (YOU WILL ALWAYS FIND IT HERE) -->
-  <script defer src="./app.js?v=2026.01.07-LOCKED"></script>
+    <!-- RUSH -->
+    <section class="card">
+      <div class="cardHead">
+        <h2>Rush Heatmap (OFF / DEF / EDGE)</h2>
+        <div class="sub">Lanes: LE / LT / LG / C / RG / RT / RE</div>
+      </div>
+      <div id="rushHeatmap"></div>
+    </section>
+
+    <!-- PASS -->
+    <section class="card">
+      <div class="cardHead">
+        <h2>Pass Direction Heatmap</h2>
+        <div class="sub">Pick Offense + Defense. Columns auto-detect from CSV.</div>
+      </div>
+
+      <div class="controls">
+        <label>Offense
+          <select id="passOffSelect"></select>
+        </label>
+        <label>Defense
+          <select id="passDefSelect"></select>
+        </label>
+      </div>
+
+      <div id="passHeatmap"></div>
+    </section>
+
+  </main>
+
+  <div id="debugBar" class="debugBar" style="display:none;"></div>
+
+  <!-- ✅ SCRIPT TAG (ALWAYS HERE) -->
+  <script defer src="./app.js?v=2026.01.07-LOCKED-02"></script>
 </body>
 </html>
