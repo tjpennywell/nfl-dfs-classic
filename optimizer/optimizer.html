@@ -1,1 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NFL DFS Classic Optimizer (Separate Page)</title>
+  <link rel="stylesheet" href="./optimizer.css" />
+</head>
+<body>
+  <header class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>NFL DFS Classic Optimizer</h1>
+        <div class="sub">Separate page • Dashboard untouched</div>
+      </div>
+      <div class="links">
+        <a class="btn" href="../index.html">← Back to Dashboard</a>
+      </div>
+    </div>
 
+    <section class="card">
+      <h2>Data Sources</h2>
+      <div class="grid2">
+        <label class="field">
+          <span>players_classic.csv</span>
+          <input id="playersPath" value="../data/players_classic.csv" />
+        </label>
+        <label class="field">
+          <span>games_classic.csv</span>
+          <input id="gamesPath" value="../data/games_classic.csv" />
+        </label>
+        <label class="field">
+          <span>optimal_lineup_rec.csv</span>
+          <input id="recPath" value="../data/optimal_lineup_rec.csv" />
+        </label>
+        <label class="field">
+          <span>heatmap_rush_proxy.csv</span>
+          <input id="heatmapPath" value="../data/heatmap_rush_proxy.csv" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnLoad" class="btn primary">Load + Validate Rec Lineup</button>
+        <button id="btnOptimize" class="btn" disabled>Run Optimizer (DK Classic)</button>
+      </div>
+
+      <div id="status" class="status">Ready.</div>
+    </section>
+
+    <section class="card">
+      <h2>Recommended Lineup (from optimal_lineup_rec.csv)</h2>
+      <div id="recSummary" class="summary muted">Load to view.</div>
+      <div class="tableWrap">
+        <table id="recTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Optimizer Controls</h2>
+
+      <div class="grid3">
+        <label class="field">
+          <span>Salary Cap</span>
+          <input id="salaryCap" type="number" value="50000" />
+        </label>
+        <label class="field">
+          <span>Max Players per Team</span>
+          <input id="maxPerTeam" type="number" value="4" />
+        </label>
+        <label class="field">
+          <span>Objective</span>
+          <select id="objective">
+            <option value="proj">Max Projection</option>
+            <option value="value">Max Projection per $ (tie-break)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Lock Players (comma-separated names or IDs)</span>
+          <input id="locks" placeholder="e.g. Josh Allen, 12345" />
+        </label>
+        <label class="field">
+          <span>Exclude Players (comma-separated names or IDs)</span>
+          <input id="excludes" placeholder="e.g. Player X, 67890" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnUseRecAsLocks" class="btn" disabled>Use Rec Lineup as Locks</button>
+        <button id="btnClearLocks" class="btn">Clear Locks/Excludes</button>
+      </div>
+
+      <div class="muted note">
+        DK Classic roster: QB, RB, RB, WR, WR, WR, TE, FLEX (RB/WR/TE), DST • Salary cap 50,000
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Optimized Lineup</h2>
+      <div id="optSummary" class="summary muted">Run optimizer to view.</div>
+      <div class="tableWrap">
+        <table id="optTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="muted note">
+        If the optimizer says “infeasible”, your locks/excludes likely conflict with roster rules or salary cap.
+      </div>
+    </section>
+  </header>
+
+  <!-- CSV parser -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- ILP solver (glpk.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/glpk.js@0.19.0/dist/glpk.min.js"></script>
+
+  <script src="./optimizer.js"></script>
+</body>
+</html>
