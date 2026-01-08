@@ -1,9 +1,8 @@
-// APP VERSION: CLASSIC-SIMPLE-REWRITE-V1
-const APP_VERSION = "CLASSIC-SIMPLE-REWRITE-V1";
-console.log("APP VERSION:", APP_VERSION, new Date().toISOString());
+// APP VERSION: CLASSIC-RUSH-STACKED-V1
+console.log("APP VERSION: CLASSIC-RUSH-STACKED-V1", new Date().toISOString());
 
 /* ==========================
-   Error banner (visible)
+   Debug banner
 ========================== */
 (function () {
   function show(msg) {
@@ -35,8 +34,6 @@ console.log("APP VERSION:", APP_VERSION, new Date().toISOString());
 /* ==========================
    Helpers
 ========================== */
-const $ = (id) => document.getElementById(id) || null;
-
 function num(x) {
   const v = parseFloat(x);
   return Number.isFinite(v) ? v : 0;
@@ -45,10 +42,7 @@ function uniq(arr) {
   return Array.from(new Set(arr));
 }
 
-/* ==========================
-   🔒 ADDED (NO OTHER CHANGES)
-   Canonical team mapping
-========================== */
+/* 🔒 ADDITION — canonical team mapping (ONLY ADDITION) */
 function canonTeam(t) {
   const x = (t || "").trim().toUpperCase();
   const map = {
@@ -70,19 +64,19 @@ function canonTeam(t) {
 function parseCSV(text) {
   const lines = (text || "").trim().split(/\r?\n/);
   if (!lines.length) return [];
-  const headers = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line) => {
+  const headers = lines[0].split(",").map(h => h.trim());
+  return lines.slice(1).map(line => {
     const cols = line.split(",");
     const obj = {};
-    headers.forEach((h, i) => (obj[h] = (cols[i] ?? "").trim()));
+    headers.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
     return obj;
   });
 }
 
 async function loadCSV(path) {
-  const url = path + (path.includes("?") ? "&" : "?") + "v=" + APP_VERSION + "&t=" + Date.now();
+  const url = path + "?v=" + Date.now();
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
+  if (!res.ok) throw new Error(`Failed to load ${path}`);
   return parseCSV(await res.text());
 }
 
@@ -95,10 +89,9 @@ function guessCol(row, candidates) {
 function setTable(el, headers, rows, cellFn) {
   if (!el) return;
   el.innerHTML = "";
-
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
-  headers.forEach((h) => {
+  headers.forEach(h => {
     const th = document.createElement("th");
     th.textContent = h;
     trh.appendChild(th);
@@ -107,9 +100,9 @@ function setTable(el, headers, rows, cellFn) {
   el.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  rows.forEach((r) => {
+  rows.forEach(r => {
     const tr = document.createElement("tr");
-    headers.forEach((h) => {
+    headers.forEach(h => {
       const td = document.createElement("td");
       td.textContent = r[h] ?? "";
       if (cellFn) cellFn(td, r, h);
@@ -120,34 +113,15 @@ function setTable(el, headers, rows, cellFn) {
   el.appendChild(tbody);
 }
 
-function showMessageTable(el, title, msg) {
-  setTable(el, [title], [{ [title]: msg }]);
-}
-
 function getColor(value, min, max) {
   const mid = 0;
   if (value >= mid) {
-    const denom = (max - mid) || 1;
-    const t = Math.min((value - mid) / denom, 1);
-    return `rgba(0, 200, 0, ${0.12 + 0.78 * t})`;
+    const t = Math.min((value - mid) / ((max - mid) || 1), 1);
+    return `rgba(0,200,0,${0.12 + 0.78 * t})`;
   } else {
-    const denom = (mid - min) || 1;
-    const t = Math.min((mid - value) / denom, 1);
-    return `rgba(220, 0, 0, ${0.12 + 0.78 * t})`;
+    const t = Math.min((mid - value) / ((mid - min) || 1), 1);
+    return `rgba(220,0,0,${0.12 + 0.78 * t})`;
   }
-}
-
-function ensureRowContainer(heatmapTable) {
-  const card = heatmapTable?.closest(".card") || heatmapTable?.parentElement || document.body;
-  let ctrl = card.querySelector("#hmCtrlRow");
-  if (!ctrl) {
-    ctrl = document.createElement("div");
-    ctrl.id = "hmCtrlRow";
-    ctrl.className = "row";
-    ctrl.style.margin = "6px 0 10px";
-    card.insertBefore(ctrl, heatmapTable);
-  }
-  return ctrl;
 }
 
 /* ==========================
@@ -155,12 +129,11 @@ function ensureRowContainer(heatmapTable) {
 ========================== */
 (async function main() {
 
-  const gamesTable = $("gamesTable");
-  const playersTable = $("playersTable");
-  const heatmapTable = $("heatmapTable");
-
-  const showPassHm = $("showPassHm");
-  const showRushHm = $("showRushHm");
+  const gamesTable = document.getElementById("gamesTable");
+  const playersTable = document.getElementById("playersTable");
+  const heatmapTable = document.getElementById("heatmapTable");
+  const showPassHm = document.getElementById("showPassHm");
+  const showRushHm = document.getElementById("showRushHm");
 
   const players = await loadCSV("data/players_classic.csv");
   const games = await loadCSV("data/games_classic.csv");
@@ -171,47 +144,33 @@ function ensureRowContainer(heatmapTable) {
   try { rushLaneOff = await loadCSV("data/rush_lane_share_off.csv"); } catch {}
   try { rushLaneDef = await loadCSV("data/rush_lane_share_def.csv"); } catch {}
 
-  const ctrlRow = ensureRowContainer(heatmapTable);
+  /* ==========================
+     PASS HEATMAP (FIXED)
+  ========================== */
+  function renderPassHeatmap() {
 
-  const offSel = document.createElement("select");
-  const defSel = document.createElement("select");
+    const offCol = guessCol(passHm[0], ["off_team","team"]);
+    const defCol = guessCol(passHm[0], ["def_team","opp"]);
+    const dirCol = guessCol(passHm[0], ["direction","location"]);
+    const depthCol = guessCol(passHm[0], ["depth"]);
+    const edgeCol = guessCol(passHm[0], ["edge","edge_off_minus_def"]);
 
-  ctrlRow.append("Off:", offSel, "Def:", defSel);
+    const offT = canonTeam(document.getElementById("hmOffTeam").value);
+    const defT = canonTeam(document.getElementById("hmDefTeam").value);
 
-  const passTeamCol = guessCol(passHm[0], ["off_team","team"]);
-  const passOppCol  = guessCol(passHm[0], ["def_team","opp"]);
-  const passDepthCol= guessCol(passHm[0], ["depth"]);
-  const passDirCol  = guessCol(passHm[0], ["direction","location"]);
-  const passEdgeCol = guessCol(passHm[0], ["edge","edge_off_minus_def"]);
-
-  let teams = uniq(passHm.map(r => canonTeam(r[passTeamCol]))).sort();
-  teams.forEach(t => {
-    offSel.add(new Option(t,t));
-    defSel.add(new Option(t,t));
-  });
-
-  function renderPass() {
-    const offT = offSel.value;
-    const defT = defSel.value;
-
-    /* ==========================
-       🔒 ONLY CHANGE APPLIED
-       Normalized team filter
-    ========================== */
     const rows = passHm.filter(r =>
-      canonTeam(r[passTeamCol]) === canonTeam(offT) &&
-      canonTeam(r[passOppCol]) === canonTeam(defT)
+      canonTeam(r[offCol]) === offT &&
+      canonTeam(r[defCol]) === defT
     );
 
     if (!rows.length) {
-      showMessageTable(heatmapTable, "Pass Heatmap", `No data for ${offT} vs ${defT}`);
+      setTable(heatmapTable, ["Pass Heatmap"], [{ "Pass Heatmap": `No data for ${offT} vs ${defT}` }]);
       return;
     }
 
-    const depths = uniq(rows.map(r => r[passDepthCol]));
-    const dirs = uniq(rows.map(r => r[passDirCol]));
-
-    const vals = rows.map(r => num(r[passEdgeCol]));
+    const depths = uniq(rows.map(r => r[depthCol]));
+    const dirs = uniq(rows.map(r => r[dirCol]));
+    const vals = rows.map(r => num(r[edgeCol]));
     const mn = Math.min(...vals);
     const mx = Math.max(...vals);
 
@@ -219,8 +178,8 @@ function ensureRowContainer(heatmapTable) {
     const out = dirs.map(d => {
       const o = { "": d };
       depths.forEach(dep => {
-        const cell = rows.find(r => r[passDirCol] === d && r[passDepthCol] === dep);
-        o[dep] = cell ? num(cell[passEdgeCol]) : 0;
+        const cell = rows.find(r => r[dirCol] === d && r[depthCol] === dep);
+        o[dep] = cell ? num(cell[edgeCol]) : 0;
       });
       return o;
     });
@@ -228,11 +187,11 @@ function ensureRowContainer(heatmapTable) {
     setTable(heatmapTable, headers, out, (td,r,h)=>{
       if (h === "") return;
       const v = num(r[h]);
-      td.textContent = (v>=0?"+":"")+v.toFixed(3);
-      td.style.backgroundColor = getColor(v,mn,mx);
+      td.textContent = (v >= 0 ? "+" : "") + v.toFixed(3);
+      td.style.backgroundColor = getColor(v, mn, mx);
     });
   }
 
-  showPassHm.addEventListener("click", renderPass);
+  showPassHm.addEventListener("click", renderPassHeatmap);
 
 })();
