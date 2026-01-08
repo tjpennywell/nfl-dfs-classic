@@ -421,7 +421,6 @@ function renderRushHeatmap() {
 
   const offT = offSel.value;
   const defT = defSel.value;
-  const metric = metricSel.value; // we’ll still keep this dropdown, but stacked mode ignores it
 
   const headers = [
     "Row",
@@ -436,21 +435,41 @@ function renderRushHeatmap() {
     "Right End"
   ];
 
-  // Build three stacked rows:
-  const offRow = { Row: "OFFENSE (share %)", off_team: offT, def_team: defT };
-  const defRow = { Row: "DEFENSE (allowed %)", off_team: offT, def_team: defT };
-  const edgeRow = { Row: "EDGE (Off − Def)", off_team: offT, def_team: defT };
+  // Three stacked rows
+  const offRow  = { Row: "OFFENSE (share %)",      off_team: offT, def_team: defT };
+  const defRow  = { Row: "DEFENSE (allowed %)",    off_team: offT, def_team: defT };
+  const edgeRow = { Row: "EDGE (Off − Def)",       off_team: offT, def_team: defT };
+
+  // Collect values so we can scale colors for ALL rows
+  const offVals = [];
+  const defVals = [];
+  const edgeVals = [];
 
   laneOrder.forEach(l => {
-    const offV = (rushOffMap[offT]?.[l] ?? 0);      // share %
-    const defV = (rushDefMap[defT]?.[l] ?? 0);      // allowed share %
-    const edgeV = offV - defV;                      // edge
+    const offV = (rushOffMap[offT]?.[l] ?? 0);
+    const defV = (rushDefMap[defT]?.[l] ?? 0);
+    const edgeV = offV - defV;
 
     offRow[laneLabels[l]] = offV;
     defRow[laneLabels[l]] = defV;
     edgeRow[laneLabels[l]] = edgeV;
+
+    offVals.push(offV);
+    defVals.push(defV);
+    edgeVals.push(edgeV);
   });
 
+  // Color scaling:
+  // For OFF/DEF, we color based on above/below that row's average (centered at avg)
+  const offAvg = offVals.length ? (offVals.reduce((a,b)=>a+b,0) / offVals.length) : 0;
+  const defAvg = defVals.length ? (defVals.reduce((a,b)=>a+b,0) / defVals.length) : 0;
+
+  const offMin = offVals.length ? Math.min(...offVals.map(v=>v-offAvg)) : -1;
+  const offMax = offVals.length ? Math.max(...offVals.map(v=>v-offAvg)) : 1;
+  const defMin = defVals.length ? Math.min(...defVals.map(v=>v-defAvg)) : -1;
+  const defMax = defVals.length ? Math.max(...defVals.map(v=>v-defAvg)) : 1;
+
+  // For EDGE, we use precomputed edgeMin/edgeMax across all matchups (stable)
   const rows = [offRow, defRow, edgeRow];
 
   setTable(heatTable, headers, rows, (td, r, h) => {
@@ -458,32 +477,40 @@ function renderRushHeatmap() {
       td.style.fontWeight = "700";
       return;
     }
-
     if (h === "off_team" || h === "def_team") {
       td.style.opacity = "0.9";
       return;
     }
 
-    // Lane cells
     const v = num(r[h]);
 
-    // OFF/DEF as % with 1 decimal
-    if (r.Row.startsWith("OFFENSE") || r.Row.startsWith("DEFENSE")) {
+    // OFFENSE row: color by (v - avg)
+    if (r.Row.startsWith("OFFENSE")) {
+      const dv = v - offAvg;
       td.textContent = v.toFixed(1) + "%";
-      td.style.backgroundColor = ""; // no coloring yet
+      td.style.backgroundColor = getColor(dv, offMin, offMax);
       return;
     }
 
-    // EDGE row: color scaled and show signed value
+    // DEFENSE row: color by (v - avg) but INVERTED meaning:
+    // Higher allowed share = worse defense -> show RED
+    // Lower allowed share = better defense -> show GREEN
+    if (r.Row.startsWith("DEFENSE")) {
+      const dv = v - defAvg;
+      td.textContent = v.toFixed(1) + "%";
+      td.style.backgroundColor = getColor(-dv, defMin, defMax); // invert
+      return;
+    }
+
+    // EDGE row: color by edge scale, show signed
     if (r.Row.startsWith("EDGE")) {
       td.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
       td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
       return;
     }
   });
-
-  // Since we're stacked rows now, keep controls visible but you can hide metric dropdown if you want later
 }
+
 
 
   // ==========================
