@@ -1,5 +1,5 @@
-// APP VERSION: CLASSIC-RUSH-STACKED-V1
-console.log("APP VERSION: CLASSIC-RUSH-STACKED-V1", new Date().toISOString());
+// APP VERSION: CLASSIC-RUSH-STACKED-V2-PASS-PFF-GRID
+console.log("APP VERSION: CLASSIC-RUSH-STACKED-V2-PASS-PFF-GRID", new Date().toISOString());
 
 // ==========================
 // Debug banner: show runtime errors on screen
@@ -35,7 +35,7 @@ console.log("APP VERSION: CLASSIC-RUSH-STACKED-V1", new Date().toISOString());
 // Helpers
 // ==========================
 function num(x) {
-  const v = parseFloat(x);
+  const v = parseFloat(String(x ?? "").replace("%", ""));
   return Number.isFinite(v) ? v : 0;
 }
 function uniq(arr) { return Array.from(new Set(arr)); }
@@ -43,9 +43,13 @@ function uniq(arr) { return Array.from(new Set(arr)); }
 function parseCSV(text) {
   const lines = (text || "").trim().split(/\r?\n/);
   if (!lines.length) return [];
-  const headers = lines[0].split(",").map(h => h.trim());
+
+  // ✅ supports either TAB or comma-delimited
+  const delim = lines[0].includes("\t") ? "\t" : ",";
+
+  const headers = lines[0].split(delim).map(h => h.trim());
   return lines.slice(1).map(line => {
-    const cols = line.split(","); // assumes no embedded commas
+    const cols = line.split(delim); // assumes no embedded delimiters
     const obj = {};
     headers.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
     return obj;
@@ -53,18 +57,23 @@ function parseCSV(text) {
 }
 
 async function loadCSV(path) {
-  // cache-bust on every load so GitHub Pages doesn't serve stale CSV/JS fetches
+  // cache-bust to avoid stale GitHub Pages fetches
   const url = path + (path.includes("?") ? "&" : "?") + "v=" + Date.now();
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
-  const text = await res.text();
-  return parseCSV(text);
+  return parseCSV(await res.text());
 }
 
 function guessCol(row, candidates) {
   if (!row) return null;
   for (const c of candidates) if (c in row) return c;
   return null;
+}
+
+function ensureId(id) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing HTML element id="${id}". Your index.html is out of sync.`);
+  return el;
 }
 
 function setTable(el, headers, rows, cellFn) {
@@ -113,17 +122,11 @@ function getColor(value, min, max) {
   }
 }
 
-function ensureId(id) {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing HTML element id="${id}". Your index.html is out of sync.`);
-  return el;
-}
-
 // ==========================
 // MAIN
 // ==========================
 (async function main() {
-  // ---- Required DOM elements (must exist in your index.html) ----
+  // ---- Required DOM elements ----
   const gamesTable = ensureId("gamesTable");
   const playersTable = ensureId("playersTable");
   const heatmapTable = ensureId("heatmapTable");
@@ -142,15 +145,10 @@ function ensureId(id) {
   const showPassHm = ensureId("showPassHm");
   const showRushHm = ensureId("showRushHm");
 
-  // ---- Load data (your current file names) ----
+  // ---- Load data ----
   const players = await loadCSV("data/players_classic.csv");
-  const games = await loadCSV("data/games_classic.csv");
-  const passHm = await loadCSV("data/heatmap_pass_matchup.csv");
-  let rushProxy = [];
-  try { rushProxy = await loadCSV("data/heatmap_rush_proxy.csv"); } catch (e) {}
-
-  let optRec = [];
-  try { optRec = await loadCSV("data/optimal_lineup_rec.csv"); } catch (e) {}
+  const games   = await loadCSV("data/games_classic.csv");
+  const passHm  = await loadCSV("data/heatmap_pass_matchup.csv");
 
   let rushLaneOff = [];
   let rushLaneDef = [];
@@ -158,7 +156,7 @@ function ensureId(id) {
   try { rushLaneDef = await loadCSV("data/rush_lane_share_def.csv"); } catch (e) {}
 
   // ==========================
-  // PLAYERS column mapping
+  // PLAYERS mapping
   // ==========================
   const pName = guessCol(players[0], ["Player","Name","player_name","PLAYER","PlayerName"]);
   const pTeam = guessCol(players[0], ["Team","team","Tm"]);
@@ -168,11 +166,13 @@ function ensureId(id) {
   const pOwn  = guessCol(players[0], ["Ownership","Own","own","ProjectedOwnership","OWN"]);
   const pInj  = guessCol(players[0], ["Injury_Status","injury_status","Status","Injury","InjuryStatus"]);
 
-  // If projection column wasn't matched, don't crash; show warning via badge as 0
-  if (!pProj) console.warn("Projection column not found in players_classic.csv. Add a column named Proj or Projection.");
+  function isOut(p) {
+    const s = (p[pInj] || "").toUpperCase();
+    return s.includes("OUT");
+  }
 
   // ==========================
-  // GAMES column mapping (your screenshot shows Home/Away/Total/Pace_Note/Spread)
+  // GAMES mapping + Env score
   // ==========================
   const gHome = guessCol(games[0], ["Home","HomeTeam","home_team"]);
   const gAway = guessCol(games[0], ["Away","AwayTeam","away_team"]);
@@ -180,7 +180,6 @@ function ensureId(id) {
   const gSpread = guessCol(games[0], ["Spread","Spread_x"]);
   const gPaceNote = guessCol(games[0], ["Pace_Note","PaceNote","Pace"]);
 
-  // Derive Env_Score
   const gEnv = "Env_Score";
   games.forEach(g => {
     const total = num(g[gTotal]);
@@ -191,19 +190,14 @@ function ensureId(id) {
     if (paceTxt.includes("fast")) paceBonus = 2;
     if (paceTxt.includes("slow")) paceBonus = -2;
 
-    // Higher total + faster pace + closer spread
     g[gEnv] = (total + paceBonus - spread);
   });
 
-  // Render games table
   const gamesSorted = [...games].sort((a,b)=>num(b[gEnv]) - num(a[gEnv]));
-  const gamesHeaders = [gAway, gHome, gTotal, gEnv].filter(Boolean);
-
-  setTable(gamesTable, gamesHeaders, gamesSorted, (td,row,h)=>{
+  setTable(gamesTable, [gAway, gHome, gTotal, gEnv].filter(Boolean), gamesSorted, (td,row,h)=>{
     if (h === gEnv) td.innerHTML = `<span class="badge">${num(row[h]).toFixed(2)}</span>`;
   });
 
-  // Populate primary game select
   primaryGameSelect.innerHTML = "";
   gamesSorted.forEach((g, idx)=>{
     const opt = document.createElement("option");
@@ -213,7 +207,7 @@ function ensureId(id) {
   });
 
   // ==========================
-  // Players filters & table
+  // Players table + filters
   // ==========================
   teamFilter.innerHTML = `<option value="">All Teams</option>`;
   uniq(players.map(p => p[pTeam]).filter(Boolean)).sort().forEach(t=>{
@@ -223,11 +217,6 @@ function ensureId(id) {
   });
 
   const playerHeaders = [pName, pTeam, pPos, pSal, pProj, pOwn, pInj].filter(Boolean);
-
-  function isOut(p) {
-    const s = (p[pInj] || "").toUpperCase();
-    return s.includes("OUT");
-  }
 
   function filteredPlayers() {
     const q = (playerSearch.value || "").toLowerCase();
@@ -268,6 +257,7 @@ function ensureId(id) {
       }
     });
   }
+
   ["input","change"].forEach(evt=>{
     playerSearch.addEventListener(evt, renderPlayers);
     posFilter.addEventListener(evt, renderPlayers);
@@ -277,23 +267,22 @@ function ensureId(id) {
   renderPlayers();
 
   // ==========================
-  // Classic lineup builder (simple rules)
+  // Classic lineup builder (simple)
   // ==========================
   function topBy(rows, col, n=1) {
     return [...rows].sort((a,b)=>num(b[col]) - num(a[col])).slice(0,n);
   }
 
   function buildClassicLineup() {
-    if (!gamesSorted.length) return { players: [], meta: { note: "No games loaded." } };
-
     const idx = parseInt(primaryGameSelect.value, 10) || 0;
     const g = gamesSorted[idx] || gamesSorted[0];
+    if (!g) return { players: [], meta: { note: "No games loaded." } };
 
     const home = g[gHome];
     const away = g[gAway];
 
     const qbs = players.filter(p =>
-      (p[pPos] === "QB") &&
+      p[pPos] === "QB" &&
       (p[pTeam] === home || p[pTeam] === away) &&
       !isOut(p)
     );
@@ -305,23 +294,13 @@ function ensureId(id) {
     const oppTeam = (qbTeam === home) ? away : home;
 
     const passCatchers = topBy(
-      players.filter(p =>
-        p[pTeam] === qbTeam &&
-        ["WR","TE"].includes(p[pPos]) &&
-        !isOut(p)
-      ),
-      pProj,
-      2
+      players.filter(p => p[pTeam] === qbTeam && ["WR","TE"].includes(p[pPos]) && !isOut(p)),
+      pProj, 2
     );
 
     const bringBack = topBy(
-      players.filter(p =>
-        p[pTeam] === oppTeam &&
-        ["RB","WR","TE"].includes(p[pPos]) &&
-        !isOut(p)
-      ),
-      pProj,
-      1
+      players.filter(p => p[pTeam] === oppTeam && ["RB","WR","TE"].includes(p[pPos]) && !isOut(p)),
+      pProj, 1
     )[0];
 
     const core = [qb, ...passCatchers, bringBack].filter(Boolean);
@@ -386,137 +365,113 @@ function ensureId(id) {
   renderLineup(buildClassicLineup());
 
   // ==========================
-  // HEATMAPS
+  // HEATMAP CONTROLS (shared)
   // ==========================
-  let currentHm = "pass";
+  const heatCard = heatmapTable.parentElement;
+  const ctrlRow = document.createElement("div");
+  ctrlRow.className = "row";
+  ctrlRow.style.gap = "8px";
+  ctrlRow.style.alignItems = "center";
+  ctrlRow.style.marginBottom = "10px";
 
-  // PASS heatmap table (data-first)
+  const offLabel = document.createElement("span"); offLabel.textContent = "Off:";
+  offLabel.style.opacity = "0.85";
+  const defLabel = document.createElement("span"); defLabel.textContent = "Def:";
+  defLabel.style.opacity = "0.85";
+
+  const offSel = document.createElement("select");
+  const defSel = document.createElement("select");
+
+  // Teams from pass data (always available)
+  const passTeams = uniq(passHm.map(r => r.off_team).filter(Boolean)).sort();
+  passTeams.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t; o.textContent = t;
+    offSel.appendChild(o);
+  });
+
+  const defTeams = uniq(passHm.map(r => r.def_team).filter(Boolean)).sort();
+  defTeams.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t; o.textContent = t;
+    defSel.appendChild(o);
+  });
+
+  // Default to top Env game if possible
+  const topG = gamesSorted[0] || {};
+  if (topG[gAway]) offSel.value = topG[gAway];
+  if (topG[gHome]) defSel.value = topG[gHome];
+
+  ctrlRow.appendChild(offLabel);
+  ctrlRow.appendChild(offSel);
+  ctrlRow.appendChild(defLabel);
+  ctrlRow.appendChild(defSel);
+
+  // Put selectors above heatmap
+  if (heatCard) heatCard.insertBefore(ctrlRow, heatmapTable);
+
+  // ==========================
+  // PASS: PFF 3x3 grid
+  // ==========================
   function renderPassPFFGrid() {
-    if (!passHm || !passHm.length) {
-      showMessageTable(heatmapTable, "Heatmaps", "Missing data/heatmap_pass_matchup.csv");
-      return;
-    }
-
-    const teamCol = guessCol(passHm[0], ["off_team","Team","team"]);
-    const oppCol  = guessCol(passHm[0], ["def_team","Opponent","opp"]);
-    const dirCol  = guessCol(passHm[0], ["direction","dir"]);
-    const locCol  = guessCol(passHm[0], ["location","loc"]);
-    const depthCol= guessCol(passHm[0], ["depth","Depth"]);
-
-    const edgeCol = guessCol(passHm[0], [
-      "edge_off_minus_def","edge_off_minus_defproxy",
-      "edge_success_off_minus_defproxy",
-      "edge_success_off_minus_def",
-      "Edge","edge"
-    ]);
-
-    if (!edgeCol) {
-      showMessageTable(heatmapTable, "Heatmaps", "Pass heatmap is missing an edge column (edge_*).");
-      return;
-    }
-
-    const edges = passHm.map(r=>num(r[edgeCol]));
-    const mn = Math.min(...edges);
-    const mx = Math.max(...edges);
-
-    const headers = [teamCol, oppCol, depthCol, locCol, dirCol, edgeCol].filter(Boolean);
-    setTable(heatmapTable, headers, passHm.slice(0, 300), (td,row,h)=>{
-      if (h === edgeCol) {
-        const v = num(row[h]);
-        td.textContent = v.toFixed(3);
-        td.style.backgroundColor = getColor(v, mn, mx);
-      }
-    });
-  }
-  // ==========================
-// PASS PFF-STYLE 3x3 GRID
-// ==========================
-function renderPassPFFGrid() {
-  if (!passHm || !passHm.length) {
-    showMessageTable(heatmapTable, "Heatmaps", "Missing pass heatmap data.");
-    return;
-  }
-
-  const offCol   = "off_team";
-  const defCol   = "def_team";
-  const locCol   = "location";
-  const depthCol = "depth_bucket";
-  const edgeCol  = "edge_off_minus_def";
-  const wtCol    = "off_pass_attempts";
-
-  const offT = offSel ? offSel.value : passHm[0][offCol];
-  const defT = defSel ? defSel.value : passHm[0][defCol];
-
-  const rows = passHm.filter(r =>
-    r[offCol] === offT &&
-    r[defCol] === defT &&
-    (r.play_type || "").toLowerCase().includes("pass")
-  );
-
-  if (!rows.length) {
-    showMessageTable(
-      heatmapTable,
-      "Heatmaps",
-      `No pass data for ${offT} vs ${defT}`
+    const rows = passHm.filter(r =>
+      r.off_team === offSel.value &&
+      r.def_team === defSel.value &&
+      (r.play_type || "").toLowerCase().includes("pass")
     );
-    return;
-  }
 
-  const LOCS   = ["left","middle","right"];
-  const DEPTHS = ["short","intermediate","deep"];
-
-  // Aggregate weighted edge
-  const grid = {};
-  LOCS.forEach(l => {
-    grid[l] = {};
-    DEPTHS.forEach(d => {
-      const cell = rows.filter(r =>
-        (r[locCol] || "").toLowerCase() === l &&
-        (r[depthCol] || "").toLowerCase() === d
-      );
-
-      let nume = 0, deno = 0;
-      cell.forEach(r => {
-        const w = Math.max(1, num(r[wtCol]));
-        nume += num(r[edgeCol]) * w;
-        deno += w;
-      });
-
-      grid[l][d] = deno ? (nume / deno) : 0;
-    });
-  });
-
-  // Flatten for color scaling
-  const vals = [];
-  LOCS.forEach(l => DEPTHS.forEach(d => vals.push(grid[l][d])));
-  const vMin = Math.min(...vals);
-  const vMax = Math.max(...vals);
-
-  // Render as table (PFF spatial layout)
-  const headers = ["", "Short", "Intermediate", "Deep"];
-  const rowsOut = LOCS.map(l => ({
-    Row: l.toUpperCase(),
-    Short: grid[l].short,
-    Intermediate: grid[l].intermediate,
-    Deep: grid[l].deep
-  }));
-
-  setTable(heatmapTable, headers, rowsOut, (td, r, h) => {
-    if (h === "") return;
-
-    if (h === "Row") {
-      td.style.fontWeight = "700";
+    if (!rows.length) {
+      showMessageTable(heatmapTable, "Heatmaps", `No pass rows for ${offSel.value} vs ${defSel.value}`);
       return;
     }
 
-    const v = num(r[h]);
-    td.textContent = (v >= 0 ? "+" : "") + v.toFixed(3);
-    td.style.backgroundColor = getColor(v, vMin, vMax);
-  });
-}
+    const LOCS = ["left","middle","right"];
+    const DEPTHS = ["short","intermediate","deep"];
 
+    const grid = {};
+    LOCS.forEach(l => {
+      grid[l] = {};
+      DEPTHS.forEach(d => {
+        const cell = rows.filter(r =>
+          (r.location || "").toLowerCase() === l &&
+          (r.depth_bucket || "").toLowerCase() === d
+        );
 
-  // RUSH stacked rows (OFF / DEF / EDGE), color ALL rows
+        let nume = 0, deno = 0;
+        cell.forEach(r => {
+          const w = Math.max(1, num(r.off_pass_attempts));
+          nume += num(r.edge_off_minus_def) * w;
+          deno += w;
+        });
+
+        grid[l][d] = deno ? (nume / deno) : 0;
+      });
+    });
+
+    const vals = [];
+    LOCS.forEach(l => DEPTHS.forEach(d => vals.push(grid[l][d])));
+    const vMin = Math.min(...vals), vMax = Math.max(...vals);
+
+    const headers = ["", "Short", "Intermediate", "Deep"];
+    const out = LOCS.map(l => ({
+      Row: l.toUpperCase(),
+      Short: grid[l].short,
+      Intermediate: grid[l].intermediate,
+      Deep: grid[l].deep
+    }));
+
+    setTable(heatmapTable, headers, out, (td, r, h) => {
+      if (h === "") return;
+      if (h === "Row") { td.style.fontWeight = "800"; return; }
+      const v = num(r[h]);
+      td.textContent = (v >= 0 ? "+" : "") + v.toFixed(3);
+      td.style.backgroundColor = getColor(v, vMin, vMax);
+    });
+  }
+
+  // ==========================
+  // RUSH: stacked OFF/DEF/EDGE (7 lanes)
+  // ==========================
   const laneOrder = ["left_end","left_tackle","left_guard","center","right_guard","right_tackle","right_end"];
   const laneLabels = {
     left_end: "Left End",
@@ -529,7 +484,7 @@ function renderPassPFFGrid() {
   };
 
   const rushOffMap = {};
-  rushLaneOff.forEach(r=>{
+  rushLaneOff.forEach(r => {
     const t = r.off_team || r.team;
     const lane = r.lane;
     if (!t || !lane) return;
@@ -538,7 +493,7 @@ function renderPassPFFGrid() {
   });
 
   const rushDefMap = {};
-  rushLaneDef.forEach(r=>{
+  rushLaneDef.forEach(r => {
     const t = r.def_team || r.team;
     const lane = r.lane;
     if (!t || !lane) return;
@@ -548,57 +503,6 @@ function renderPassPFFGrid() {
 
   const teamsAll = uniq(Object.keys(rushOffMap).concat(Object.keys(rushDefMap))).sort();
 
-  // Create Off/Def selectors (always present in Rush view)
-  const heatCard = heatmapTable.closest(".card") || heatmapTable.parentElement;
-  const ctrlRow = document.createElement("div");
-  ctrlRow.className = "row";
-  ctrlRow.id = "rushCtrlRow";
-  ctrlRow.style.display = "none";
-  ctrlRow.style.gap = "8px";
-  ctrlRow.style.alignItems = "center";
-  ctrlRow.style.marginBottom = "10px";
-
-  const offLabel = document.createElement("span");
-  offLabel.textContent = "Off:";
-  offLabel.style.opacity = "0.85";
-
-  const defLabel = document.createElement("span");
-  defLabel.textContent = "Def:";
-  defLabel.style.opacity = "0.85";
-
-  const offSel = document.createElement("select");
-  const defSel = document.createElement("select");
-
-  function fillSel(sel) {
-    sel.innerHTML = "";
-    teamsAll.forEach(t=>{
-      const o = document.createElement("option");
-      o.value = t; o.textContent = t;
-      sel.appendChild(o);
-    });
-  }
-
-  if (teamsAll.length) {
-    fillSel(offSel);
-    fillSel(defSel);
-
-    // default to top env game teams
-    const topG = gamesSorted[0] || {};
-    offSel.value = topG[gAway] || teamsAll[0];
-    defSel.value = topG[gHome] || teamsAll[0];
-  }
-
-  ctrlRow.appendChild(offLabel);
-  ctrlRow.appendChild(offSel);
-  ctrlRow.appendChild(defLabel);
-  ctrlRow.appendChild(defSel);
-
-  if (heatCard) {
-    // safest placement
-    heatCard.prepend(ctrlRow);
-  }
-
-  // Precompute edge min/max across all matchups (stable scaling)
   let edgeMin = -1, edgeMax = 1;
   if (teamsAll.length) {
     edgeMin = Infinity; edgeMax = -Infinity;
@@ -617,19 +521,14 @@ function renderPassPFFGrid() {
 
   function renderRushHeatmap() {
     if (!teamsAll.length) {
-      showMessageTable(
-        heatmapTable,
-        "Heatmaps",
-        "Rush lane files not detected. Need:\n- data/rush_lane_share_off.csv\n- data/rush_lane_share_def.csv"
-      );
+      showMessageTable(heatmapTable, "Heatmaps", "Rush lane files missing.");
       return;
     }
 
     const offT = offSel.value;
     const defT = defSel.value;
 
-    const headers = [
-      "Row","off_team","def_team",
+    const headers = ["Row","off_team","def_team",
       "Left End","Left Tackle","Left Guard","Center","Right Guard","Right Tackle","Right End"
     ];
 
@@ -637,9 +536,7 @@ function renderPassPFFGrid() {
     const defRow  = { Row: "DEFENSE (allowed %)", off_team: offT, def_team: defT };
     const edgeRow = { Row: "EDGE (Off − Def)",    off_team: offT, def_team: defT };
 
-    const offVals = [];
-    const defVals = [];
-    const edgeVals = [];
+    const offVals = [], defVals = [];
 
     laneOrder.forEach(l => {
       const offV = (rushOffMap[offT]?.[l] ?? 0);
@@ -652,22 +549,19 @@ function renderPassPFFGrid() {
 
       offVals.push(offV);
       defVals.push(defV);
-      edgeVals.push(edgeV);
     });
 
-    const offAvg = offVals.length ? (offVals.reduce((a,b)=>a+b,0)/offVals.length) : 0;
-    const defAvg = defVals.length ? (defVals.reduce((a,b)=>a+b,0)/defVals.length) : 0;
+    const offAvg = offVals.length ? offVals.reduce((a,b)=>a+b,0)/offVals.length : 0;
+    const defAvg = defVals.length ? defVals.reduce((a,b)=>a+b,0)/defVals.length : 0;
 
     const offMin = offVals.length ? Math.min(...offVals.map(v=>v-offAvg)) : -1;
     const offMax = offVals.length ? Math.max(...offVals.map(v=>v-offAvg)) : 1;
     const defMin = defVals.length ? Math.min(...defVals.map(v=>v-defAvg)) : -1;
     const defMax = defVals.length ? Math.max(...defVals.map(v=>v-defAvg)) : 1;
 
-    const rows = [offRow, defRow, edgeRow];
-
-    setTable(heatmapTable, headers, rows, (td, r, h) => {
-      if (h === "Row") { td.style.fontWeight = "700"; return; }
-      if (h === "off_team" || h === "def_team") { td.style.opacity = "0.9"; return; }
+    setTable(heatmapTable, headers, [offRow, defRow, edgeRow], (td, r, h) => {
+      if (h === "Row") { td.style.fontWeight = "800"; return; }
+      if (h === "off_team" || h === "def_team") return;
 
       const v = num(r[h]);
 
@@ -677,15 +571,12 @@ function renderPassPFFGrid() {
         td.style.backgroundColor = getColor(dv, offMin, offMax);
         return;
       }
-
       if (r.Row.startsWith("DEFENSE")) {
         const dv = v - defAvg;
         td.textContent = v.toFixed(1) + "%";
-        // invert: higher allowed = worse -> red
         td.style.backgroundColor = getColor(-dv, defMin, defMax);
         return;
       }
-
       if (r.Row.startsWith("EDGE")) {
         td.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
         td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
@@ -694,14 +585,14 @@ function renderPassPFFGrid() {
     });
   }
 
+  // ==========================
+  // HEATMAP toggles
+  // ==========================
+  let currentHm = "pass";
+
   function renderHeatmap() {
-    if (currentHm === "pass") {
-      ctrlRow.style.display = "none";
-      renderPassHeatmap();
-    } else {
-      ctrlRow.style.display = teamsAll.length ? "flex" : "none";
-      renderRushHeatmap();
-    }
+    if (currentHm === "pass") renderPassPFFGrid();
+    else renderRushHeatmap();
   }
 
   showPassHm.addEventListener("click", ()=>{ currentHm = "pass"; renderHeatmap(); });
@@ -711,5 +602,4 @@ function renderPassPFFGrid() {
   defSel.addEventListener("change", renderHeatmap);
 
   renderHeatmap();
-
 })();
