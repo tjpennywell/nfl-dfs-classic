@@ -409,60 +409,82 @@ function getColor(value, min, max) {
     if (!Number.isFinite(edgeMax)) edgeMax = 1;
   }
 
-  function renderRushHeatmap() {
-    if (!teamsAll.length) {
-      showMessageTable(
-        heatTable,
-        "Heatmaps",
-        "Rush lane files not detected. Need:\n- data/rush_lane_share_off.csv\n- data/rush_lane_share_def.csv"
-      );
+function renderRushHeatmap() {
+  if (!teamsAll.length) {
+    showMessageTable(
+      heatTable,
+      "Heatmaps",
+      "Rush lane files not detected. Need:\n- data/rush_lane_share_off.csv\n- data/rush_lane_share_def.csv"
+    );
+    return;
+  }
+
+  const offT = offSel.value;
+  const defT = defSel.value;
+  const metric = metricSel.value; // we’ll still keep this dropdown, but stacked mode ignores it
+
+  const headers = [
+    "Row",
+    "off_team",
+    "def_team",
+    "Left End",
+    "Left Tackle",
+    "Left Guard",
+    "Center",
+    "Right Guard",
+    "Right Tackle",
+    "Right End"
+  ];
+
+  // Build three stacked rows:
+  const offRow = { Row: "OFFENSE (share %)", off_team: offT, def_team: defT };
+  const defRow = { Row: "DEFENSE (allowed %)", off_team: offT, def_team: defT };
+  const edgeRow = { Row: "EDGE (Off − Def)", off_team: offT, def_team: defT };
+
+  laneOrder.forEach(l => {
+    const offV = (rushOffMap[offT]?.[l] ?? 0);      // share %
+    const defV = (rushDefMap[defT]?.[l] ?? 0);      // allowed share %
+    const edgeV = offV - defV;                      // edge
+
+    offRow[laneLabels[l]] = offV;
+    defRow[laneLabels[l]] = defV;
+    edgeRow[laneLabels[l]] = edgeV;
+  });
+
+  const rows = [offRow, defRow, edgeRow];
+
+  setTable(heatTable, headers, rows, (td, r, h) => {
+    if (h === "Row") {
+      td.style.fontWeight = "700";
       return;
     }
 
-    const offT = offSel.value;
-    const defT = defSel.value;
-    const metric = metricSel.value;
-
-    const headers = ["off_team","def_team",
-      "Left End","Left Tackle","Left Guard","Center","Right Guard","Right Tackle","Right End"
-    ];
-
-    const row = { off_team: offT, def_team: defT };
-
-    laneOrder.forEach(l=>{
-      const offV = (rushOffMap[offT]?.[l] ?? 0);
-      const defV = (rushDefMap[defT]?.[l] ?? 0);
-      let v = 0;
-      if (metric === "edge") v = offV - defV;
-      if (metric === "off") v = offV;
-      if (metric === "def") v = defV;
-      row[laneLabels[l]] = v;
-    });
-
-    setTable(heatTable, headers, [row], (td,r,h)=>{
-      if (h !== "off_team" && h !== "def_team") {
-        const v = num(r[h]);
-        td.textContent = v.toFixed(2);
-        if (metric === "edge") td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
-      }
-    });
-  }
-
-  function renderHeatmap() {
-    if (currentHm === "pass") {
-      ctrlRow.style.display = "none";
-      renderPassHeatmap();
-    } else {
-      ctrlRow.style.display = "flex";
-      renderRushHeatmap();
+    if (h === "off_team" || h === "def_team") {
+      td.style.opacity = "0.9";
+      return;
     }
-  }
 
-  passBtn.addEventListener("click", ()=>{ currentHm="pass"; renderHeatmap(); });
-  rushBtn.addEventListener("click", ()=>{ currentHm="rush"; renderHeatmap(); });
-  [offSel, defSel, metricSel].forEach(el => el.addEventListener("change", renderHeatmap));
+    // Lane cells
+    const v = num(r[h]);
 
-  renderHeatmap();
+    // OFF/DEF as % with 1 decimal
+    if (r.Row.startsWith("OFFENSE") || r.Row.startsWith("DEFENSE")) {
+      td.textContent = v.toFixed(1) + "%";
+      td.style.backgroundColor = ""; // no coloring yet
+      return;
+    }
+
+    // EDGE row: color scaled and show signed value
+    if (r.Row.startsWith("EDGE")) {
+      td.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
+      td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
+      return;
+    }
+  });
+
+  // Since we're stacked rows now, keep controls visible but you can hide metric dropdown if you want later
+}
+
 
   // ==========================
   // CLASSIC LINEUP BUILDER (simple, works with your columns)
