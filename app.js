@@ -202,19 +202,32 @@ function getColor(v, min, max) {
     lineupTable.innerHTML = "";
   };
 
-  /* ==========================
-     HEATMAPS — PASS (WORKING GRID)
+   /* ==========================
+     HEATMAPS — PASS + RUSH (ROBUST)
   ========================== */
   let currentHm = "pass";
 
+  // PASS columns (your file is TSV/CSV but now parseCSV handles it)
   const offCol = "off_team";
   const defCol = "def_team";
   const locCol = "location";
   const depthCol = "depth_bucket";
   const edgeCol = "edge_off_minus_def";
+  const playTypeCol = "play_type";
 
-  const teams = uniq(passHm.map(r => r[offCol])).sort();
-  teams.forEach(t => {
+  function norm(x) { return String(x || "").trim().toLowerCase(); }
+
+  // Populate team dropdowns from BOTH off_team and def_team
+  const teamsAll = uniq(
+    passHm
+      .map(r => r[offCol])
+      .concat(passHm.map(r => r[defCol]))
+      .filter(Boolean)
+  ).sort();
+
+  hmOffTeam.innerHTML = "";
+  hmDefTeam.innerHTML = "";
+  teamsAll.forEach(t => {
     const o1 = document.createElement("option");
     o1.value = t; o1.textContent = t;
     hmOffTeam.appendChild(o1);
@@ -224,63 +237,97 @@ function getColor(v, min, max) {
     hmDefTeam.appendChild(o2);
   });
 
+  // Default to first game (avoid OFF=DEF)
+  if (games.length) {
+    const away = games[0][gAway];
+    const home = games[0][gHome];
+    if (teamsAll.includes(away)) hmOffTeam.value = away;
+    if (teamsAll.includes(home)) hmDefTeam.value = home;
+  }
+  if (hmOffTeam.value === hmDefTeam.value && teamsAll.length > 1) {
+    hmDefTeam.value = teamsAll.find(t => t !== hmOffTeam.value) || hmDefTeam.value;
+  }
+
   function renderPassHeatmap() {
     const off = hmOffTeam.value;
     const def = hmDefTeam.value;
 
-    const rows = passHm.filter(r =>
-      r[offCol] === off &&
-      r[defCol] === def &&
-      r.play_type === "pass"
-    );
+    // ✅ robust filter:
+    // - allow PASS / pass / "pass" etc
+    // - allow no play_type column (fallback)
+    const rows = passHm.filter(r => {
+      const okMatch = (r[offCol] === off && r[defCol] === def);
+      if (!okMatch) return false;
+
+      const pt = norm(r[playTypeCol]);
+      if (!playTypeCol in r) return true;
+      return pt.includes("pass"); // handles "PASS", "pass", "pass_attempt", etc
+    });
 
     if (!rows.length) {
-      heatmapTable.innerHTML = "<tr><td>No data</td></tr>";
+      heatmapTable.innerHTML = "<tr><td>No pass data for this matchup</td></tr>";
       return;
     }
 
+    const LOCS = ["left","middle","right"];
+    const DEPTHS = ["short","intermediate","deep"];
+
+    // Build grid (average edge per cell)
     const grid = {};
-    ["left","middle","right"].forEach(l => {
+    LOCS.forEach(l => {
       grid[l] = {};
-      ["short","intermediate","deep"].forEach(d => {
+      DEPTHS.forEach(d => {
         const cell = rows.filter(r =>
-          r[locCol] === l && r[depthCol] === d
+          norm(r[locCol]) === l && norm(r[depthCol]) === d
         );
-        const avg = cell.reduce((s,r)=>s+num(r[edgeCol]),0)/(cell.length||1);
+        const avg = cell.length
+          ? cell.reduce((s,r)=>s+num(r[edgeCol]),0) / cell.length
+          : 0;
         grid[l][d] = avg;
       });
     });
 
-    const vals = Object.values(grid).flatMap(o=>Object.values(o));
+    const vals = LOCS.flatMap(l => DEPTHS.map(d => grid[l][d]));
     const min = Math.min(...vals), max = Math.max(...vals);
 
     const out = [
-      {Row:"LEFT", ...grid.left},
-      {Row:"MIDDLE", ...grid.middle},
-      {Row:"RIGHT", ...grid.right}
+      { Row:"LEFT",   Short:grid.left.short,   Intermediate:grid.left.intermediate,   Deep:grid.left.deep },
+      { Row:"MIDDLE", Short:grid.middle.short, Intermediate:grid.middle.intermediate, Deep:grid.middle.deep },
+      { Row:"RIGHT",  Short:grid.right.short,  Intermediate:grid.right.intermediate,  Deep:grid.right.deep }
     ];
 
-    setTable(heatmapTable,
-      ["Row","short","intermediate","deep"],
+    setTable(
+      heatmapTable,
+      ["Row","Short","Intermediate","Deep"],
       out,
       (td,r,h)=>{
-        if(h!=="Row"){
-          const v=num(r[h]);
-          td.textContent=(v>=0?"+":"")+v.toFixed(3);
-          td.style.backgroundColor=getColor(v,min,max);
-        }
+        if (h === "Row") { td.style.fontWeight="700"; return; }
+        const v = num(r[h]);
+        td.textContent = (v>=0?"+":"") + v.toFixed(3);
+        td.style.backgroundColor = getColor(v, min, max);
       }
+    );
+  }
+
+  // ✅ Rush: show a simple message (since your “bring back” file didn’t include rush maps)
+  // If you want rush stacked OFF/DEF/EDGE back, we’ll paste the full rush section next.
+  function renderRushHeatmap() {
+    showMessageTable(
+      heatmapTable,
+      "Heatmaps",
+      "Rush heatmap not wired in this simplified file.\nTell me and I’ll paste the Rush OFF/DEF/EDGE stacked heatmap block back in."
     );
   }
 
   function renderHeatmap() {
     if (currentHm === "pass") renderPassHeatmap();
+    else renderRushHeatmap();
   }
 
   showPassHm.onclick = () => { currentHm="pass"; renderHeatmap(); };
+  showRushHm.onclick = () => { currentHm="rush"; renderHeatmap(); };
+
   hmOffTeam.onchange = renderHeatmap;
   hmDefTeam.onchange = renderHeatmap;
 
   renderHeatmap();
-
-})();
