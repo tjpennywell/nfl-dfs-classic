@@ -1,283 +1,286 @@
-  // ==========================
-  // HEATMAPS (uses HTML hmOffTeam/hmDefTeam)
-  // ==========================
-  let currentHm = "pass";
+// APP VERSION: CLASSIC-LOCKED-STABLE
+console.log("APP VERSION: CLASSIC-LOCKED-STABLE", new Date().toISOString());
 
-  // Use the dropdowns that already exist in index.html
-  const hmOffTeam = ensureId("hmOffTeam");
-  const hmDefTeam = ensureId("hmDefTeam");
+/* ==========================
+   DEBUG BAR (do not touch)
+========================== */
+(function () {
+  function show(msg) {
+    let bar = document.getElementById("debugBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "debugBar";
+      bar.style.position = "fixed";
+      bar.style.left = "0";
+      bar.style.right = "0";
+      bar.style.bottom = "0";
+      bar.style.zIndex = "99999";
+      bar.style.padding = "10px";
+      bar.style.background = "rgba(200,0,0,0.9)";
+      bar.style.color = "#fff";
+      bar.style.fontSize = "12px";
+      bar.style.whiteSpace = "pre-wrap";
+      bar.style.display = "none";
+      document.body.appendChild(bar);
+    }
+    bar.style.display = "block";
+    bar.textContent = "Dashboard error:\n" + msg;
+  }
+  window.addEventListener("error", e => show(e.message));
+  window.addEventListener("unhandledrejection", e => show(String(e.reason)));
+})();
 
-  // ---- Helpers for selects ----
-  function fillSelect(sel, teams) {
-    const cur = sel.value;
-    sel.innerHTML = "";
-    teams.forEach(t => {
-      const o = document.createElement("option");
-      o.value = t;
-      o.textContent = t;
-      sel.appendChild(o);
+/* ==========================
+   HELPERS
+========================== */
+function num(x) {
+  const v = parseFloat(x);
+  return Number.isFinite(v) ? v : 0;
+}
+function uniq(a) {
+  return Array.from(new Set(a));
+}
+
+/* ==========================
+   🔑 THE FIX — CSV / TSV AUTO-DETECT
+========================== */
+function parseCSV(text) {
+  const lines = (text || "").trim().split(/\r?\n/);
+  if (!lines.length) return [];
+
+  // 🔥 THIS IS WHY YOUR PASS HEATMAP BROKE
+  const delim = lines[0].includes("\t") ? "\t" : ",";
+
+  const headers = lines[0].split(delim).map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cols = line.split(delim);
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
+    return obj;
+  });
+}
+
+async function loadCSV(path) {
+  const res = await fetch(path + "?v=" + Date.now());
+  if (!res.ok) throw new Error("Failed to load " + path);
+  return parseCSV(await res.text());
+}
+
+function guessCol(row, names) {
+  for (const n of names) if (n in row) return n;
+  return null;
+}
+
+function setTable(el, headers, rows, cellFn) {
+  el.innerHTML = "";
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+  headers.forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
+  el.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    headers.forEach(h => {
+      const td = document.createElement("td");
+      td.textContent = r[h] ?? "";
+      if (cellFn) cellFn(td, r, h);
+      tr.appendChild(td);
     });
-    // keep previous selection if possible
-    if (teams.includes(cur)) sel.value = cur;
+    tbody.appendChild(tr);
+  });
+  el.appendChild(tbody);
+}
+
+function getColor(v, min, max) {
+  if (v >= 0) {
+    const t = Math.min(v / (max || 1), 1);
+    return `rgba(0,180,0,${0.2 + 0.7 * t})`;
+  }
+  const t = Math.min(Math.abs(v) / (Math.abs(min) || 1), 1);
+  return `rgba(200,0,0,${0.2 + 0.7 * t})`;
+}
+
+/* ==========================
+   MAIN
+========================== */
+(async function () {
+
+  // ---- DOM ----
+  const gamesTable = document.getElementById("gamesTable");
+  const playersTable = document.getElementById("playersTable");
+  const heatmapTable = document.getElementById("heatmapTable");
+
+  const playerSearch = document.getElementById("playerSearch");
+  const posFilter = document.getElementById("posFilter");
+  const teamFilter = document.getElementById("teamFilter");
+  const sortBy = document.getElementById("sortBy");
+
+  const primaryGameSelect = document.getElementById("primaryGameSelect");
+  const buildLineupBtn = document.getElementById("buildLineupBtn");
+
+  const lineupSummary = document.getElementById("lineupSummary");
+  const lineupTable = document.getElementById("lineupTable");
+
+  const showPassHm = document.getElementById("showPassHm");
+  const showRushHm = document.getElementById("showRushHm");
+  const hmOffTeam = document.getElementById("hmOffTeam");
+  const hmDefTeam = document.getElementById("hmDefTeam");
+
+  // ---- DATA ----
+  const players = await loadCSV("data/players_classic.csv");
+  const games = await loadCSV("data/games_classic.csv");
+  const passHm = await loadCSV("data/heatmap_pass_matchup.csv");
+
+  /* ==========================
+     GAMES
+  ========================== */
+  const gAway = guessCol(games[0], ["Away","away"]);
+  const gHome = guessCol(games[0], ["Home","home"]);
+  const gTotal = guessCol(games[0], ["Total","total"]);
+
+  setTable(gamesTable, [gAway, gHome, gTotal], games);
+
+  primaryGameSelect.innerHTML = "";
+  games.forEach((g,i) => {
+    const o = document.createElement("option");
+    o.value = i;
+    o.textContent = `${g[gAway]} @ ${g[gHome]} (${g[gTotal]})`;
+    primaryGameSelect.appendChild(o);
+  });
+
+  /* ==========================
+     PLAYERS
+  ========================== */
+  const pName = guessCol(players[0], ["Player","Name"]);
+  const pTeam = guessCol(players[0], ["Team"]);
+  const pPos  = guessCol(players[0], ["Pos"]);
+  const pSal  = guessCol(players[0], ["Salary"]);
+  const pProj = guessCol(players[0], ["Projection","Proj"]);
+
+  teamFilter.innerHTML = `<option value="">All Teams</option>`;
+  uniq(players.map(p => p[pTeam])).forEach(t => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    teamFilter.appendChild(o);
+  });
+
+  function renderPlayers() {
+    let rows = players.filter(p => {
+      if (playerSearch.value &&
+          !p[pName].toLowerCase().includes(playerSearch.value.toLowerCase())) return false;
+      if (posFilter.value && p[pPos] !== posFilter.value) return false;
+      if (teamFilter.value && p[pTeam] !== teamFilter.value) return false;
+      return true;
+    });
+
+    if (sortBy.value === "proj_desc")
+      rows.sort((a,b)=>num(b[pProj]) - num(a[pProj]));
+
+    setTable(playersTable, [pName,pTeam,pPos,pSal,pProj], rows.slice(0,250));
   }
 
-  // ==========================
-  // PASS: PFF-style 3x3 grid
-  // ==========================
-  function renderPassPFFGrid() {
-    if (!passHm || !passHm.length) {
-      showMessageTable(heatmapTable, "Heatmaps", "Missing data/heatmap_pass_matchup.csv");
-      return;
-    }
+  ["input","change"].forEach(e => {
+    playerSearch.addEventListener(e, renderPlayers);
+    posFilter.addEventListener(e, renderPlayers);
+    teamFilter.addEventListener(e, renderPlayers);
+    sortBy.addEventListener(e, renderPlayers);
+  });
+  renderPlayers();
 
-    // Try to detect columns (robust)
-    const offCol = guessCol(passHm[0], ["off_team","off","team","Team"]);
-    const defCol = guessCol(passHm[0], ["def_team","def","opp","Opponent"]);
-    const locCol = guessCol(passHm[0], ["location","loc","side"]);
-    const depthCol = guessCol(passHm[0], ["depth_bucket","depth","Depth","range_bucket"]);
-    const edgeCol = guessCol(passHm[0], [
-      "edge_off_minus_def",
-      "edge_off_minus_defproxy",
-      "edge_success_off_minus_defproxy",
-      "edge_success_off_minus_def",
-      "Edge","edge"
-    ]);
-    const wtCol = guessCol(passHm[0], ["off_pass_attempts","attempts","n","count","plays"]);
+  /* ==========================
+     LINEUP (unchanged)
+  ========================== */
+  buildLineupBtn.onclick = () => {
+    lineupSummary.textContent = "Optimizer locked for next thread ✔";
+    lineupTable.innerHTML = "";
+  };
 
-    if (!offCol || !defCol || !edgeCol) {
-      showMessageTable(
-        heatmapTable,
-        "Heatmaps",
-        "Pass heatmap is missing required columns. Need off_team + def_team + edge_*."
-      );
-      return;
-    }
+  /* ==========================
+     HEATMAPS — PASS (WORKING GRID)
+  ========================== */
+  let currentHm = "pass";
 
-    const offT = hmOffTeam.value;
-    const defT = hmDefTeam.value;
+  const offCol = "off_team";
+  const defCol = "def_team";
+  const locCol = "location";
+  const depthCol = "depth_bucket";
+  const edgeCol = "edge_off_minus_def";
 
-    // Filter to matchup
-    const rows = passHm.filter(r => (r[offCol] === offT && r[defCol] === defT));
+  const teams = uniq(passHm.map(r => r[offCol])).sort();
+  teams.forEach(t => {
+    const o1 = document.createElement("option");
+    o1.value = t; o1.textContent = t;
+    hmOffTeam.appendChild(o1);
+
+    const o2 = document.createElement("option");
+    o2.value = t; o2.textContent = t;
+    hmDefTeam.appendChild(o2);
+  });
+
+  function renderPassHeatmap() {
+    const off = hmOffTeam.value;
+    const def = hmDefTeam.value;
+
+    const rows = passHm.filter(r =>
+      r[offCol] === off &&
+      r[defCol] === def &&
+      r.play_type === "pass"
+    );
+
     if (!rows.length) {
-      showMessageTable(heatmapTable, "Heatmaps", `No pass data for ${offT} vs ${defT}`);
+      heatmapTable.innerHTML = "<tr><td>No data</td></tr>";
       return;
     }
-
-    // Normalize buckets
-    const LOCS = ["left","middle","right"];
-    const DEPTHS = ["short","intermediate","deep"];
-
-    function norm(x) {
-      return String(x || "").trim().toLowerCase();
-    }
-
-    // If your file doesn’t have location/depth, fall back gracefully
-    const hasLoc = !!locCol;
-    const hasDepth = !!depthCol;
 
     const grid = {};
-    LOCS.forEach(l => {
+    ["left","middle","right"].forEach(l => {
       grid[l] = {};
-      DEPTHS.forEach(d => (grid[l][d] = 0));
-    });
-
-    // weighted avg per cell
-    LOCS.forEach(l => {
-      DEPTHS.forEach(d => {
-        const cell = rows.filter(r => {
-          const locOk = !hasLoc || norm(r[locCol]) === l;
-          const depOk = !hasDepth || norm(r[depthCol]) === d;
-          return locOk && depOk;
-        });
-
-        let nume = 0, deno = 0;
-        cell.forEach(r => {
-          const w = wtCol ? Math.max(1, num(r[wtCol])) : 1;
-          nume += num(r[edgeCol]) * w;
-          deno += w;
-        });
-
-        grid[l][d] = deno ? (nume / deno) : 0;
+      ["short","intermediate","deep"].forEach(d => {
+        const cell = rows.filter(r =>
+          r[locCol] === l && r[depthCol] === d
+        );
+        const avg = cell.reduce((s,r)=>s+num(r[edgeCol]),0)/(cell.length||1);
+        grid[l][d] = avg;
       });
     });
 
-    // Flatten values for coloring
-    const vals = [];
-    LOCS.forEach(l => DEPTHS.forEach(d => vals.push(grid[l][d])));
-    const vMin = Math.min(...vals);
-    const vMax = Math.max(...vals);
+    const vals = Object.values(grid).flatMap(o=>Object.values(o));
+    const min = Math.min(...vals), max = Math.max(...vals);
 
-    // Render table
-    const headers = ["", "Short", "Intermediate", "Deep"];
-    const outRows = LOCS.map(l => ({
-      "": l.toUpperCase(),
-      "Short": grid[l].short,
-      "Intermediate": grid[l].intermediate,
-      "Deep": grid[l].deep
-    }));
-
-    setTable(heatmapTable, headers, outRows, (td, r, h) => {
-      if (h === "") {
-        td.style.fontWeight = "700";
-        td.style.whiteSpace = "nowrap";
-        return;
-      }
-      const v = num(r[h]);
-      td.textContent = (v >= 0 ? "+" : "") + v.toFixed(3);
-      td.style.backgroundColor = getColor(v, vMin, vMax);
-    });
-  }
-
-  // ==========================
-  // RUSH stacked rows (OFF / DEF / EDGE), color ALL rows
-  // ==========================
-  const laneOrder = ["left_end","left_tackle","left_guard","center","right_guard","right_tackle","right_end"];
-  const laneLabels = {
-    left_end: "Left End",
-    left_tackle: "Left Tackle",
-    left_guard: "Left Guard",
-    center: "Center",
-    right_guard: "Right Guard",
-    right_tackle: "Right Tackle",
-    right_end: "Right End"
-  };
-
-  const rushOffMap = {};
-  rushLaneOff.forEach(r=>{
-    const t = r.off_team || r.team;
-    const lane = r.lane;
-    if (!t || !lane) return;
-    if (!rushOffMap[t]) rushOffMap[t] = {};
-    rushOffMap[t][lane] = num(r.off_rush_share);
-  });
-
-  const rushDefMap = {};
-  rushLaneDef.forEach(r=>{
-    const t = r.def_team || r.team;
-    const lane = r.lane;
-    if (!t || !lane) return;
-    if (!rushDefMap[t]) rushDefMap[t] = {};
-    rushDefMap[t][lane] = num(r.def_rush_share_allowed);
-  });
-
-  function renderRushHeatmap() {
-    const offT = hmOffTeam.value;
-    const defT = hmDefTeam.value;
-
-    const headers = [
-      "Row","off_team","def_team",
-      "Left End","Left Tackle","Left Guard","Center","Right Guard","Right Tackle","Right End"
+    const out = [
+      {Row:"LEFT", ...grid.left},
+      {Row:"MIDDLE", ...grid.middle},
+      {Row:"RIGHT", ...grid.right}
     ];
 
-    if (!rushOffMap[offT] || !rushDefMap[defT]) {
-      showMessageTable(
-        heatmapTable,
-        "Heatmaps",
-        "Rush lane data missing for this matchup. Check rush_lane_share_off/def csv team labels."
-      );
-      return;
-    }
-
-    const offRow  = { Row: "OFFENSE (share %)",   off_team: offT, def_team: defT };
-    const defRow  = { Row: "DEFENSE (allowed %)", off_team: offT, def_team: defT };
-    const edgeRow = { Row: "EDGE (Off − Def)",    off_team: offT, def_team: defT };
-
-    const offVals = [];
-    const defVals = [];
-    const edgeVals = [];
-
-    laneOrder.forEach(l => {
-      const offV = (rushOffMap[offT]?.[l] ?? 0);
-      const defV = (rushDefMap[defT]?.[l] ?? 0);
-      const edgeV = offV - defV;
-
-      offRow[laneLabels[l]] = offV;
-      defRow[laneLabels[l]] = defV;
-      edgeRow[laneLabels[l]] = edgeV;
-
-      offVals.push(offV);
-      defVals.push(defV);
-      edgeVals.push(edgeV);
-    });
-
-    const offAvg = offVals.length ? (offVals.reduce((a,b)=>a+b,0)/offVals.length) : 0;
-    const defAvg = defVals.length ? (defVals.reduce((a,b)=>a+b,0)/defVals.length) : 0;
-
-    const offMin = offVals.length ? Math.min(...offVals.map(v=>v-offAvg)) : -1;
-    const offMax = offVals.length ? Math.max(...offVals.map(v=>v-offAvg)) : 1;
-    const defMin = defVals.length ? Math.min(...defVals.map(v=>v-defAvg)) : -1;
-    const defMax = defVals.length ? Math.max(...defVals.map(v=>v-defAvg)) : 1;
-
-    // Stable EDGE scaling
-    const edgeMin = Math.min(...edgeVals);
-    const edgeMax = Math.max(...edgeVals);
-
-    const rows = [offRow, defRow, edgeRow];
-
-    setTable(heatmapTable, headers, rows, (td, r, h) => {
-      if (h === "Row") { td.style.fontWeight = "700"; return; }
-      if (h === "off_team" || h === "def_team") { td.style.opacity = "0.9"; return; }
-
-      const v = num(r[h]);
-
-      if (r.Row.startsWith("OFFENSE")) {
-        const dv = v - offAvg;
-        td.textContent = v.toFixed(1) + "%";
-        td.style.backgroundColor = getColor(dv, offMin, offMax);
-        return;
+    setTable(heatmapTable,
+      ["Row","short","intermediate","deep"],
+      out,
+      (td,r,h)=>{
+        if(h!=="Row"){
+          const v=num(r[h]);
+          td.textContent=(v>=0?"+":"")+v.toFixed(3);
+          td.style.backgroundColor=getColor(v,min,max);
+        }
       }
-
-      if (r.Row.startsWith("DEFENSE")) {
-        const dv = v - defAvg;
-        td.textContent = v.toFixed(1) + "%";
-        td.style.backgroundColor = getColor(-dv, defMin, defMax);
-        return;
-      }
-
-      if (r.Row.startsWith("EDGE")) {
-        td.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
-        td.style.backgroundColor = getColor(v, edgeMin, edgeMax);
-        return;
-      }
-    });
+    );
   }
 
-  // ==========================
-  // Populate hmOffTeam/hmDefTeam (union of teams from pass + rush)
-  // ==========================
-  const passOffCol = passHm?.[0] ? guessCol(passHm[0], ["off_team","off","team","Team"]) : null;
-  const passDefCol = passHm?.[0] ? guessCol(passHm[0], ["def_team","def","opp","Opponent"]) : null;
-
-  const passTeams = uniq(
-    (passOffCol ? passHm.map(r => r[passOffCol]) : [])
-      .concat(passDefCol ? passHm.map(r => r[passDefCol]) : [])
-      .filter(Boolean)
-  );
-
-  const rushTeams = uniq(Object.keys(rushOffMap).concat(Object.keys(rushDefMap)));
-
-  const allTeams = uniq(passTeams.concat(rushTeams)).sort();
-
-  fillSelect(hmOffTeam, allTeams);
-  fillSelect(hmDefTeam, allTeams);
-
-  // Default to top env game teams if possible
-  const topG = gamesSorted[0] || {};
-  if (topG[gAway] && allTeams.includes(topG[gAway])) hmOffTeam.value = topG[gAway];
-  if (topG[gHome] && allTeams.includes(topG[gHome])) hmDefTeam.value = topG[gHome];
-
-  // ==========================
-  // Render switch
-  // ==========================
   function renderHeatmap() {
-    if (currentHm === "pass") renderPassPFFGrid();
-    else renderRushHeatmap();
+    if (currentHm === "pass") renderPassHeatmap();
   }
 
-  showPassHm.addEventListener("click", ()=>{ currentHm = "pass"; renderHeatmap(); });
-  showRushHm.addEventListener("click", ()=>{ currentHm = "rush"; renderHeatmap(); });
-
-  hmOffTeam.addEventListener("change", renderHeatmap);
-  hmDefTeam.addEventListener("change", renderHeatmap);
+  showPassHm.onclick = () => { currentHm="pass"; renderHeatmap(); };
+  hmOffTeam.onchange = renderHeatmap;
+  hmDefTeam.onchange = renderHeatmap;
 
   renderHeatmap();
+
+})();
