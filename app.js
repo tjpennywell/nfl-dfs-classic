@@ -196,15 +196,22 @@ function laneMapFromRows(rows) {
   RUSH_LANES.forEach(l => (map[l] = 0));
   if (!rows || !rows.length) return map;
 
-  // expects { lane, value } but also tolerates { lane, pct/score/edge }
-  const valueKey = pickExistingKey(rows[0], ["value", "val", "pct", "percent", "score", "edge"]);
+  // Find the best numeric column automatically (not lane/team)
+  const keys = Object.keys(rows[0]);
+  const ignore = new Set(["lane", "team", "abbr", "opponent", "opp", "off_team", "def_team"]);
+
+  const numericKey =
+    keys.find(k => !ignore.has(k) && rows.some(r => isFiniteNum(r[k]))) ||
+    keys.find(k => k !== "lane"); // fallback
+
   rows.forEach(r => {
     const lane = (r.lane || "").trim();
-    if (RUSH_LANES.includes(lane)) map[lane] = num(r[valueKey]);
+    if (RUSH_LANES.includes(lane)) map[lane] = num(r[numericKey]);
   });
 
   return map;
 }
+
 
 function pickExistingKey(obj, keys) {
   for (const k of keys) if (k in obj) return k;
