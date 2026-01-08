@@ -1,51 +1,145 @@
+:root {
+  --bg: #0f1117;
+  --card: #141826;
+  --text: #eaeaea;
+  --muted: rgba(255,255,255,0.7);
+  --border: rgba(255,255,255,0.12);
+  --gap: 14px;
+}
+
+* { box-sizing: border-box; }
+
 body {
-  background: #0f1117;
-  color: #eaeaea;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  padding: 20px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
+  padding: 18px;
 }
 
-h1, h2 {
-  margin-bottom: 6px;
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-#versionStamp {
+h1 { margin: 0; font-size: 22px; }
+h2 { margin: 0; font-size: 16px; }
+
+.version {
+  margin-top: 4px;
   font-size: 12px;
-  opacity: 0.7;
+  color: var(--muted);
+}
+
+.miniNote {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 420px;
+  text-align: right;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+}
+
+@media (min-width: 900px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
-/* ===== Heatmap Layout ===== */
-
-#rushHeatmap {
-  margin-top: 12px;
+.sub {
+  font-size: 12px;
+  color: var(--muted);
 }
 
-.heatmapHeader,
-.heatmapRow {
+/* Controls */
+.controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 8px 0 12px 0;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.controls select {
+  display: block;
+  margin-top: 6px;
+  background: #0f1220;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 160px;
+  outline: none;
+}
+
+/* Shared heatmap styles */
+.heatHeader, .heatRow {
   display: grid;
-  grid-template-columns: 120px repeat(7, 1fr);
   gap: 6px;
   margin-bottom: 6px;
+  align-items: center;
 }
 
-.heatmapLabel {
+.heatLabel {
   text-align: right;
-  font-weight: 700;
+  font-weight: 800;
   padding-right: 6px;
-  opacity: 0.9;
+  opacity: 0.95;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.heatmapHeaderCell {
+.heatHeaderCell {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.85;
 }
 
-.heatmapCell {
+.heatCell {
   text-align: center;
   padding: 10px 6px;
-  border-radius: 8px;
-  font-weight: 700;
+  border-radius: 10px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* Debug bar */
+.debugBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px;
+  background: rgba(180, 0, 0, 0.92);
+  color: white;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  z-index: 99999;
 }
