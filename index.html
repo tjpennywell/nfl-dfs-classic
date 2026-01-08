@@ -8,51 +8,54 @@
 </head>
 <body>
 
-  <h1>NFL DFS Classic Dashboard</h1>
-  <div id="versionStamp"></div>
+<h1>NFL DFS Classic Dashboard</h1>
+<div id="versionStamp"></div>
 
-  <!-- ================= GAMES ================= -->
-  <h2>Games</h2>
-  <table id="gamesTable"></table>
+<hr />
 
-  <!-- ================= PLAYERS ================= -->
-  <h2>Players</h2>
-  <div class="row">
-    <input id="playerSearch" placeholder="Search player" />
-    <select id="posFilter">
-      <option value="">All Pos</option>
-      <option>QB</option><option>RB</option><option>WR</option>
-      <option>TE</option><option>DST</option>
-    </select>
-    <select id="teamFilter"></select>
-    <select id="sortBy">
-      <option value="proj_desc">Proj ↓</option>
-      <option value="value_desc">Value ↓</option>
-      <option value="own_asc">Ownership ↑</option>
-      <option value="salary_desc">Salary ↓</option>
-    </select>
-  </div>
-  <table id="playersTable"></table>
+<h2>Games</h2>
+<table id="gamesTable"></table>
 
-  <!-- ================= LINEUP ================= -->
-  <h2>Classic Lineup Builder</h2>
-  <div class="row">
-    <select id="primaryGameSelect"></select>
-    <button id="buildLineupBtn">Build Lineup</button>
-  </div>
-  <div id="lineupSummary"></div>
-  <table id="lineupTable"></table>
+<h2>Players</h2>
+<div class="row">
+  <input id="playerSearch" placeholder="Search player" />
+  <select id="posFilter">
+    <option value="">All Pos</option>
+    <option>QB</option>
+    <option>RB</option>
+    <option>WR</option>
+    <option>TE</option>
+    <option>DST</option>
+  </select>
+  <select id="teamFilter"></select>
+  <select id="sortBy">
+    <option value="proj_desc">Proj ↓</option>
+    <option value="value_desc">Value ↓</option>
+    <option value="salary_desc">Salary ↓</option>
+    <option value="own_asc">Ownership ↑</option>
+  </select>
+</div>
+<table id="playersTable"></table>
 
-  <!-- ================= HEATMAPS ================= -->
-  <h2>Heatmaps</h2>
-  <div class="row">
-    <button id="showPassHm">Pass</button>
-    <button id="showRushHm">Rush</button>
-  </div>
-  <table id="heatmapTable"></table>
+<h2>Classic Lineup Builder</h2>
+<div class="row">
+  <select id="primaryGameSelect"></select>
+  <button id="buildLineupBtn">Build Lineup</button>
+</div>
+<div id="lineupSummary"></div>
+<table id="lineupTable"></table>
 
-  <!-- ================= SCRIPT ================= -->
-  <script defer src="./app.js?v=CLASSIC-RUSH-STACKED-V1"></script>
+<h2>Heatmaps</h2>
+<div class="row">
+  <button id="showPassHm">Pass</button>
+  <button id="showRushHm">Rush</button>
+  <span>Off:</span>
+  <select id="hmOffTeam"></select>
+  <span>Def:</span>
+  <select id="hmDefTeam"></select>
+</div>
+<table id="heatmapTable"></table>
 
+<script defer src="./app.js?v=2026.01.07-FINAL"></script>
 </body>
-</html>
+
