@@ -1,3 +1,29 @@
+// === DEBUG BANNER (shows errors on the page) ===
+(function () {
+  function show(msg) {
+    let bar = document.getElementById("debugBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "debugBar";
+      bar.style.position = "fixed";
+      bar.style.left = "0";
+      bar.style.right = "0";
+      bar.style.bottom = "0";
+      bar.style.zIndex = "99999";
+      bar.style.padding = "10px 12px";
+      bar.style.background = "rgba(200,0,0,0.92)";
+      bar.style.color = "#fff";
+      bar.style.fontFamily = "system-ui, Arial";
+      bar.style.fontSize = "12px";
+      bar.style.whiteSpace = "pre-wrap";
+      document.body.appendChild(bar);
+    }
+    bar.textContent = "Dashboard error:\n" + msg;
+  }
+
+  window.addEventListener("error", (e) => show(e.message || String(e.error || e)));
+  window.addEventListener("unhandledrejection", (e) => show(String(e.reason || e)));
+})();
 // Minimal, dependency-free CSV parser (handles simple CSVs)
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
