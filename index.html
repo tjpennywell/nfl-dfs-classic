@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>NFL DFS Classic Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -12,12 +11,48 @@
   <h1>NFL DFS Classic Dashboard</h1>
   <div id="versionStamp"></div>
 
-  <hr />
+  <!-- ================= GAMES ================= -->
+  <h2>Games</h2>
+  <table id="gamesTable"></table>
 
-  <h2>Rush Matchup Heatmap</h2>
-  <div id="rushHeatmap"></div>
+  <!-- ================= PLAYERS ================= -->
+  <h2>Players</h2>
+  <div class="row">
+    <input id="playerSearch" placeholder="Search player" />
+    <select id="posFilter">
+      <option value="">All Pos</option>
+      <option>QB</option><option>RB</option><option>WR</option>
+      <option>TE</option><option>DST</option>
+    </select>
+    <select id="teamFilter"></select>
+    <select id="sortBy">
+      <option value="proj_desc">Proj ↓</option>
+      <option value="value_desc">Value ↓</option>
+      <option value="own_asc">Ownership ↑</option>
+      <option value="salary_desc">Salary ↓</option>
+    </select>
+  </div>
+  <table id="playersTable"></table>
 
-  <!-- ✅ SCRIPT TAG (YOU WILL ALWAYS FIND IT HERE) -->
-  <script defer src="./app.js?v=2026.01.07-LOCKED"></script>
+  <!-- ================= LINEUP ================= -->
+  <h2>Classic Lineup Builder</h2>
+  <div class="row">
+    <select id="primaryGameSelect"></select>
+    <button id="buildLineupBtn">Build Lineup</button>
+  </div>
+  <div id="lineupSummary"></div>
+  <table id="lineupTable"></table>
+
+  <!-- ================= HEATMAPS ================= -->
+  <h2>Heatmaps</h2>
+  <div class="row">
+    <button id="showPassHm">Pass</button>
+    <button id="showRushHm">Rush</button>
+  </div>
+  <table id="heatmapTable"></table>
+
+  <!-- ================= SCRIPT ================= -->
+  <script defer src="./app.js?v=CLASSIC-RUSH-STACKED-V1"></script>
+
 </body>
 </html>
