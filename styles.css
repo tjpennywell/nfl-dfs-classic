@@ -1,145 +1,127 @@
-:root {
-  --bg: #0f1117;
-  --card: #141826;
-  --text: #eaeaea;
-  --muted: rgba(255,255,255,0.7);
-  --border: rgba(255,255,255,0.12);
-  --gap: 14px;
+:root{
+  --bg:#0b1220;
+  --panel:#0f1a2e;
+  --panel2:#0c1526;
+  --text:#e8eefc;
+  --muted:#a9b6d6;
+  --line:rgba(255,255,255,.10);
+  --accent:#6aa6ff;
 }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
-  padding: 18px;
+*{box-sizing:border-box}
+body{
+  margin:0;
+  padding:18px;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:linear-gradient(180deg,var(--bg),#070b14);
+  color:var(--text);
 }
 
-.top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 14px;
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+h1{margin:0;font-size:28px}
+h2{margin:0 0 10px;font-size:18px}
+
+.muted{color:var(--muted);font-size:12px}
+
+.card{
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:14px;
+  margin:12px 0;
 }
 
-h1 { margin: 0; font-size: 22px; }
-h2 { margin: 0; font-size: 16px; }
-
-.version {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
+.row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+  margin:10px 0;
 }
 
-.miniNote {
-  font-size: 12px;
-  color: var(--muted);
-  max-width: 420px;
-  text-align: right;
+input,select,button{
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px 12px;
+  font-size:13px;
+  outline:none;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--gap);
+button{cursor:pointer;font-weight:800}
+button:hover{border-color:rgba(106,166,255,.55)}
+button:active{transform:translateY(1px)}
+
+.badge{
+  display:inline-block;
+  padding:3px 8px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(106,166,255,.14);
+  font-weight:800;
+  font-size:12px;
 }
 
-@media (min-width: 900px) {
-  .grid { grid-template-columns: 1fr 1fr; }
+.pill{
+  display:inline-block;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.05);
+  margin:4px 6px 0 0;
+  font-size:12px;
 }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  background:var(--panel2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
 }
 
-.cardHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
+thead th{
+  text-align:left;
+  font-size:12px;
+  color:var(--muted);
+  padding:10px 10px;
+  background:rgba(255,255,255,.04);
+  border-bottom:1px solid var(--line);
+  position:sticky;
+  top:0;
+  z-index:1;
 }
 
-.sub {
-  font-size: 12px;
-  color: var(--muted);
+tbody td{
+  padding:9px 10px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  vertical-align:middle;
 }
 
-/* Controls */
-.controls {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin: 8px 0 12px 0;
-  flex-wrap: wrap;
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:rgba(255,255,255,.03)}
+
+#gamesTable,#playersTable,#lineupTable{
+  display:block;
+  overflow:auto;
+  max-height:520px;
+}
+#heatmapTable{
+  display:block;
+  overflow:auto;
+  max-height:260px;
 }
 
-.controls label {
-  font-size: 12px;
-  color: var(--muted);
+#heatmapTable td{
+  font-weight:900;
+  text-align:center;
+  border-right:1px solid rgba(255,255,255,.06);
 }
-
-.controls select {
-  display: block;
-  margin-top: 6px;
-  background: #0f1220;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 12px;
-  min-width: 160px;
-  outline: none;
-}
-
-/* Shared heatmap styles */
-.heatHeader, .heatRow {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 6px;
-  align-items: center;
-}
-
-.heatLabel {
-  text-align: right;
-  font-weight: 800;
-  padding-right: 6px;
-  opacity: 0.95;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.heatHeaderCell {
-  text-align: center;
-  font-size: 11px;
-  opacity: 0.85;
-}
-
-.heatCell {
-  text-align: center;
-  padding: 10px 6px;
-  border-radius: 10px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-
-/* Debug bar */
-.debugBar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 10px 12px;
-  background: rgba(180, 0, 0, 0.92);
-  color: white;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  z-index: 99999;
+#heatmapTable td:first-child{
+  text-align:left;
+  font-weight:900;
 }
