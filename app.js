@@ -391,7 +391,7 @@ function ensureId(id) {
   let currentHm = "pass";
 
   // PASS heatmap table (data-first)
-  function renderPassHeatmap() {
+  function renderPassPFFGrid() {
     if (!passHm || !passHm.length) {
       showMessageTable(heatmapTable, "Heatmaps", "Missing data/heatmap_pass_matchup.csv");
       return;
