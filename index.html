@@ -1,70 +1,23 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="UTF-8" />
   <title>NFL DFS Classic Dashboard</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">NFL DFS Classic</div>
-    <div class="sub">Excel → CSV → Web (stable)</div>
-  </header>
 
-  <main class="grid">
-    <section class="card">
-      <h2>Slate Games (Pace + Vegas + Plays Allowed)</h2>
-      <div class="row">
-        <label>Primary game:</label>
-        <select id="primaryGameSelect"></select>
-        <button id="buildLineupBtn">Build Classic Lineup</button>
-      </div>
-      <div class="hint">Primary game defaults to highest <b>Env_Score</b>. You can override.</div>
-      <div class="tableWrap"><table id="gamesTable"></table></div>
-    </section>
+  <h1>NFL DFS Classic Dashboard</h1>
+  <div id="versionStamp"></div>
 
-    <section class="card">
-      <h2>Recommended Lineup (Classic Rules)</h2>
-      <div id="lineupSummary" class="summary"></div>
-      <div class="tableWrap"><table id="lineupTable"></table></div>
-      <div class="hint">Rules: QB + 2 pass-catchers + bring-back, RB-heavy FLEX, injury-aware.</div>
-    </section>
+  <hr />
 
-    <section class="card">
-      <h2>Players</h2>
-      <div class="row">
-        <input id="playerSearch" placeholder="Search name/team..." />
-        <select id="posFilter">
-          <option value="">All POS</option>
-          <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>DST</option>
-        </select>
-        <select id="teamFilter"><option value="">All Teams</option></select>
-        <select id="sortBy">
-          <option value="proj_desc">Proj ↓</option>
-          <option value="value_desc">Value (Proj/$) ↓</option>
-          <option value="own_asc">Own ↑</option>
-          <option value="salary_desc">Salary ↓</option>
-        </select>
-      </div>
-      <div class="tableWrap"><table id="playersTable"></table></div>
-    </section>
+  <h2>Rush Matchup Heatmap</h2>
+  <div id="rushHeatmap"></div>
 
-    <section class="card">
-      <h2>Heatmaps (True Color Scaling)</h2>
-      <div class="row">
-        <button id="showPassHm">Pass</button>
-        <button id="showRushHm">Rush</button>
-      </div>
-      <div class="hint">Green = advantage, Red = disadvantage (scaled to slate distribution).</div>
-      <div class="tableWrap"><table id="heatmapTable"></table></div>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <span>Data files: players_classic.csv, games_classic.csv, heatmap_pass_matchup.csv, heatmap_rush_proxy.csv</span>
-  </footer>
-
-  <script src="app.js"></script>
+  <!-- ✅ SCRIPT TAG (YOU WILL ALWAYS FIND IT HERE) -->
+  <script defer src="./app.js?v=2026.01.07-LOCKED"></script>
 </body>
 </html>
