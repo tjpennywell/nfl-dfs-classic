@@ -2,7 +2,6 @@
 // NFL DFS Classic Dashboard
 // FULL app.js (stable)
 // ==========================
-
 // ---- Debug banner (shows runtime errors on-screen) ----
 (function () {
   function show(msg) {
