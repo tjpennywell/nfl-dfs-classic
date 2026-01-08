@@ -428,6 +428,93 @@ function ensureId(id) {
       }
     });
   }
+  // ==========================
+// PASS PFF-STYLE 3x3 GRID
+// ==========================
+function renderPassPFFGrid() {
+  if (!passHm || !passHm.length) {
+    showMessageTable(heatmapTable, "Heatmaps", "Missing pass heatmap data.");
+    return;
+  }
+
+  const offCol   = "off_team";
+  const defCol   = "def_team";
+  const locCol   = "location";
+  const depthCol = "depth_bucket";
+  const edgeCol  = "edge_off_minus_def";
+  const wtCol    = "off_pass_attempts";
+
+  const offT = offSel ? offSel.value : passHm[0][offCol];
+  const defT = defSel ? defSel.value : passHm[0][defCol];
+
+  const rows = passHm.filter(r =>
+    r[offCol] === offT &&
+    r[defCol] === defT &&
+    (r.play_type || "").toLowerCase().includes("pass")
+  );
+
+  if (!rows.length) {
+    showMessageTable(
+      heatmapTable,
+      "Heatmaps",
+      `No pass data for ${offT} vs ${defT}`
+    );
+    return;
+  }
+
+  const LOCS   = ["left","middle","right"];
+  const DEPTHS = ["short","intermediate","deep"];
+
+  // Aggregate weighted edge
+  const grid = {};
+  LOCS.forEach(l => {
+    grid[l] = {};
+    DEPTHS.forEach(d => {
+      const cell = rows.filter(r =>
+        (r[locCol] || "").toLowerCase() === l &&
+        (r[depthCol] || "").toLowerCase() === d
+      );
+
+      let nume = 0, deno = 0;
+      cell.forEach(r => {
+        const w = Math.max(1, num(r[wtCol]));
+        nume += num(r[edgeCol]) * w;
+        deno += w;
+      });
+
+      grid[l][d] = deno ? (nume / deno) : 0;
+    });
+  });
+
+  // Flatten for color scaling
+  const vals = [];
+  LOCS.forEach(l => DEPTHS.forEach(d => vals.push(grid[l][d])));
+  const vMin = Math.min(...vals);
+  const vMax = Math.max(...vals);
+
+  // Render as table (PFF spatial layout)
+  const headers = ["", "Short", "Intermediate", "Deep"];
+  const rowsOut = LOCS.map(l => ({
+    Row: l.toUpperCase(),
+    Short: grid[l].short,
+    Intermediate: grid[l].intermediate,
+    Deep: grid[l].deep
+  }));
+
+  setTable(heatmapTable, headers, rowsOut, (td, r, h) => {
+    if (h === "") return;
+
+    if (h === "Row") {
+      td.style.fontWeight = "700";
+      return;
+    }
+
+    const v = num(r[h]);
+    td.textContent = (v >= 0 ? "+" : "") + v.toFixed(3);
+    td.style.backgroundColor = getColor(v, vMin, vMax);
+  });
+}
+
 
   // RUSH stacked rows (OFF / DEF / EDGE), color ALL rows
   const laneOrder = ["left_end","left_tackle","left_guard","center","right_guard","right_tackle","right_end"];
