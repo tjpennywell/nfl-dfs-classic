@@ -384,7 +384,13 @@ function getColor(value, min, max) {
   ctrlRow.appendChild(defSel);
   ctrlRow.appendChild(metricSel);
 
-  if (heatCard) heatCard.insertBefore(ctrlRow, heatTable);
+ if (heatCard) {
+  // safer: add controls near the top of the heatmap card even if table isn't a direct child
+  heatCard.prepend(ctrlRow);
+} else {
+  // fallback: put controls right before the table
+  heatTable.parentElement?.insertBefore(ctrlRow, heatTable);
+}
 
   // Precompute edge min/max for coloring
   let edgeMin = -1, edgeMax = 1;
