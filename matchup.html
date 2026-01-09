@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NFL Matchup Analysis</title>
+    <!-- Reuse the dark theme styles from the optimizer for consistency -->
+    <link rel="stylesheet" href="../optimizer/optimizer.css">
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <!-- Matchup analysis logic -->
+    <script type="module" src="matchup.js"></script>
+</head>
+<body>
+    <header>
+        <h1>NFL Matchup Analysis</h1>
+    </header>
+    <main>
+        <!-- Team selection for matchup -->
+        <section id="selection">
+            <label>
+                Offense Team:
+                <select id="offTeam"></select>
+            </label>
+            <label>
+                Defense Team:
+                <select id="defTeam"></select>
+            </label>
+            <button id="analyzeBtn">Analyze</button>
+        </section>
+        <!-- Summary of the matchup -->
+        <section id="summary">
+            <h2>Team Summary</h2>
+            <p id="teamSummary">Select teams and click Analyze to see summary.</p>
+        </section>
+        <!-- Pass heatmap -->
+        <section id="passHeatmap">
+            <h2>Pass Heatmap</h2>
+            <table id="passTable" class="heatmap-table">
+                <thead>
+                    <tr>
+                        <th>Row</th>
+                        <th>Left End</th>
+                        <th>Left Tackle</th>
+                        <th>Left Guard</th>
+                        <th>Center</th>
+                        <th>Right Guard</th>
+                        <th>Right Tackle</th>
+                        <th>Right End</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+        <!-- Rush heatmap -->
+        <section id="rushHeatmap">
+            <h2>Rush Heatmap</h2>
+            <table id="rushTable" class="heatmap-table">
+                <thead>
+                    <tr>
+                        <th>Row</th>
+                        <th>Left End</th>
+                        <th>Left Tackle</th>
+                        <th>Left Guard</th>
+                        <th>Center</th>
+                        <th>Right Guard</th>
+                        <th>Right Tackle</th>
+                        <th>Right End</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>

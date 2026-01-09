@@ -1,0 +1,300 @@
+// NFL DFS Showdown Optimizer
+// This script builds a DraftKings showdown lineup with environment-based
+// projection adjustments (blowout, shootout, defensive). It loads
+// player and game data, applies scaling factors based on the chosen
+// environment and favoured team, and solves an integer linear program
+// to maximize total projected points while respecting salary and roster
+// constraints.
+
+import GLPKModule from 'https://cdn.jsdelivr.net/npm/glpk.js/dist/glpk.min.js';
+
+let glpk;
+
+const data = {
+    players: [],
+    games: []
+};
+
+/** Load a CSV file via PapaParse. */
+function loadCsv(path) {
+    return new Promise((resolve, reject) => {
+        Papa.parse(path, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+            complete: results => resolve(results.data),
+            error: err => reject(err)
+        });
+    });
+}
+
+/** Normalize team abbreviations. */
+function normalizeTeam(code) {
+    if (!code) return '';
+    const c = String(code).trim().toUpperCase();
+    if (c === 'LAR' || c === 'RAMS') return 'LA';
+    return c;
+}
+
+/** Load players and games CSVs. Determine path relative to this page. */
+async function loadAllCsv() {
+    const pathName = window.location.pathname;
+    const isSubDir = pathName.includes('/showdown/');
+    const prefix = isSubDir ? '../data/' : 'data/';
+    data.players = await loadCsv(prefix + 'players_classic.csv');
+    data.games = await loadCsv(prefix + 'games_classic.csv');
+}
+
+/** Populate the game selection dropdown. */
+function populateGameSelect() {
+    const select = document.getElementById('gameSelect');
+    select.innerHTML = '';
+    data.games.forEach(game => {
+        const option = document.createElement('option');
+        const gameId = game.GameId || game.gameId || game.game_id || '';
+        const away = game.AwayTeam || game.awayTeam || game.away_team || '';
+        const home = game.HomeTeam || game.homeTeam || game.home_team || '';
+        const total = game.Total || game.total || '';
+        const env = game.Env || game.env || '';
+        option.value = gameId;
+        option.textContent = `${away} @ ${home} (Total ${total} | Env ${env})`;
+        select.appendChild(option);
+    });
+    if (select.options.length > 0) select.selectedIndex = 0;
+    // Trigger update of favouredTeam dropdown
+    updateFavouredTeams();
+}
+
+/** Populate the favoured team selector based on selected game. */
+function updateFavouredTeams() {
+    const favSel = document.getElementById('favoredTeam');
+    favSel.innerHTML = '';
+    const gameId = document.getElementById('gameSelect').value;
+    const game = data.games.find(g => (g.GameId || g.gameId || g.game_id) === gameId);
+    if (!game) return;
+    const teams = [normalizeTeam(game.AwayTeam || game.awayTeam || game.away_team || ''), normalizeTeam(game.HomeTeam || game.homeTeam || game.home_team || '')];
+    teams.forEach(team => {
+        const opt = document.createElement('option');
+        opt.value = team;
+        opt.textContent = team;
+        favSel.appendChild(opt);
+    });
+    if (favSel.options.length > 0) favSel.selectedIndex = 0;
+}
+
+/** Create a scaling factor function based on environment and favoured team. */
+function getScalingFunction(env, favTeam) {
+    return function (player) {
+        const team = normalizeTeam(player.Team || player.team);
+        const pos = (player.Position || player.position || '').toUpperCase();
+        let scale = 1.0;
+        if (env === 'blowout') {
+            // Favoured team gets a boost; opponent team gets a reduction
+            if (team === favTeam) scale = 1.15;
+            else scale = 0.85;
+        } else if (env === 'shootout') {
+            // Base boost for all players
+            scale = 1.1;
+            // Additional boost/penalty by position
+            if (pos === 'QB' || pos === 'WR' || pos === 'TE') scale *= 1.1; // pass catchers
+            else if (pos === 'RB') scale *= 1.05;
+            else if (pos === 'DST') scale *= 0.9;
+        } else if (env === 'defensive') {
+            // Base reduction for all players
+            scale = 0.9;
+            if (pos === 'RB' || pos === 'DST') scale *= 1.2;
+            else if (pos === 'TE') scale *= 1.05;
+            else if (pos === 'WR' || pos === 'QB') scale *= 0.85;
+            else scale *= 0.95;
+        }
+        return scale;
+    };
+}
+
+/** Build and solve the showdown ILP. */
+async function optimizeShowdown() {
+    const statusDiv = document.getElementById('status');
+    statusDiv.textContent = '';
+    const salaryCap = Number(document.getElementById('salaryCap').value) || 50000;
+    const maxTeam = Number(document.getElementById('maxTeam').value) || 4;
+    const gameId = document.getElementById('gameSelect').value;
+    const env = document.getElementById('envSelect').value;
+    const favTeam = document.getElementById('favoredTeam').value;
+    // Filter players for this game
+    const players = data.players.filter(p => {
+        const gId = p.GameId || p.gameId || p.Game || '';
+        return gId === gameId;
+    });
+    if (!players || players.length === 0) {
+        statusDiv.textContent = 'No players found for the selected game.';
+        return;
+    }
+    // Determine scaling function
+    const scaleFn = getScalingFunction(env, favTeam);
+    // Build variables for Captain and Flex for each player
+    const variables = [];
+    // Unique mapping for player ID strings
+    const playerVersions = {}; // { originalId: { CPT: newId, FLEX: newId } }
+    players.forEach(p => {
+        const id = String(p.Id || p.id);
+        // compute scaled projection
+        const baseProj = Number(p.Projection || p.projection || 0);
+        const scale = scaleFn(p);
+        const scaledProj = baseProj * scale;
+        const salary = Number(p.Salary || p.salary || 0);
+        // Captain version
+        const cId = id + '_CPT';
+        const cVar = {
+            name: cId,
+            team: normalizeTeam(p.Team || p.team),
+            playerId: id,
+            role: 'CPT',
+            salary: salary * 1.5,
+            projection: scaledProj * 1.5
+        };
+        variables.push(cVar);
+        // Flex version
+        const fId = id + '_FLEX';
+        const fVar = {
+            name: fId,
+            team: normalizeTeam(p.Team || p.team),
+            playerId: id,
+            role: 'FLEX',
+            salary: salary,
+            projection: scaledProj
+        };
+        variables.push(fVar);
+        playerVersions[id] = { CPT: cId, FLEX: fId };
+    });
+    // Build LP model
+    const lpVars = variables.map(v => ({ name: v.name, coef: v.projection }));
+    const subjectTo = [];
+    // Salary cap constraint
+    subjectTo.push({
+        name: 'salary_cap',
+        vars: variables.map(v => ({ name: v.name, coef: v.salary })),
+        bnds: { type: glpk.GLP_UP, ub: salaryCap, lb: 0 }
+    });
+    // One captain exactly
+    subjectTo.push({
+        name: 'captain_count',
+        vars: variables.map(v => ({ name: v.name, coef: v.role === 'CPT' ? 1 : 0 })),
+        bnds: { type: glpk.GLP_FX, ub: 1, lb: 1 }
+    });
+    // Total lineup size 6 (CPT + 5 Flex)
+    subjectTo.push({
+        name: 'lineup_size',
+        vars: variables.map(v => ({ name: v.name, coef: 1 })),
+        bnds: { type: glpk.GLP_FX, ub: 6, lb: 6 }
+    });
+    // Player duplication constraint: a player can appear only once (in CPT or Flex)
+    Object.keys(playerVersions).forEach(pid => {
+        const pv = playerVersions[pid];
+        subjectTo.push({
+            name: `dup_${pid}`,
+            vars: [ { name: pv.CPT, coef: 1 }, { name: pv.FLEX, coef: 1 } ],
+            bnds: { type: glpk.GLP_UP, ub: 1, lb: 0 }
+        });
+    });
+    // Team maximum constraint: maximum players from one team
+    const teams = {};
+    variables.forEach(v => {
+        const team = v.team;
+        if (!teams[team]) teams[team] = [];
+        teams[team].push(v);
+    });
+    Object.keys(teams).forEach(team => {
+        subjectTo.push({
+            name: `team_max_${team}`,
+            vars: teams[team].map(v => ({ name: v.name, coef: 1 })),
+            bnds: { type: glpk.GLP_UP, ub: maxTeam, lb: 0 }
+        });
+    });
+    const lp = {
+        name: 'showdown',
+        objective: { direction: glpk.GLP_MAX, name: 'proj', vars: lpVars },
+        subjectTo,
+        binaries: variables.map(v => v.name)
+    };
+    try {
+        const result = await glpk.solve(lp, { msglev: glpk.GLP_MSG_OFF });
+        if (!result || !result.result || !result.result.vars) {
+            statusDiv.textContent = 'Solver returned no result.';
+            return;
+        }
+        const solVars = result.result.vars;
+        const selected = variables.filter(v => solVars[v.name] && solVars[v.name] > 0.5);
+        if (selected.length !== 6) {
+            statusDiv.textContent = `Expected 6 players but selected ${selected.length}.`;
+        }
+        renderShowdownLineup(selected);
+    } catch (err) {
+        console.error('Showdown optimization error:', err);
+        statusDiv.textContent = 'Optimization failed: ' + (err.message || err.toString());
+    }
+}
+
+/** Render the showdown lineup. */
+function renderShowdownLineup(selected) {
+    const tbody = document.querySelector('#sdLineup tbody');
+    const totalsRow = document.getElementById('sdTotals');
+    tbody.innerHTML = '';
+    totalsRow.innerHTML = '';
+    let totalSalary = 0;
+    let totalProj = 0;
+    selected.forEach((v, idx) => {
+        const row = document.createElement('tr');
+        row.appendChild(createCell(idx + 1));
+        // find original player data
+        const player = data.players.find(p => String(p.Id || p.id) === v.playerId);
+        row.appendChild(createCell(player ? (player.Name || player.name) : v.playerId));
+        row.appendChild(createCell(player ? (player.Position || player.position) : '-'));
+        row.appendChild(createCell(player ? (player.Team || player.team) : '-'));
+        row.appendChild(createCell(v.role));
+        row.appendChild(createCell(v.salary.toFixed(0)));
+        row.appendChild(createCell(v.projection.toFixed(2)));
+        totalSalary += v.salary;
+        totalProj += v.projection;
+        tbody.appendChild(row);
+    });
+    // Totals row
+    const totalCells = [];
+    totalCells.push(createCell('Totals'));
+    totalCells.push(createCell(''));
+    totalCells.push(createCell(''));
+    totalCells.push(createCell(''));
+    totalCells.push(createCell(''));
+    totalCells.push(createCell(totalSalary.toFixed(0)));
+    totalCells.push(createCell(totalProj.toFixed(2)));
+    totalCells.forEach(cell => totalsRow.appendChild(cell));
+}
+
+/** Create a table cell with text. */
+function createCell(text) {
+    const td = document.createElement('td');
+    td.textContent = text;
+    return td;
+}
+
+/** Attach event handlers. */
+function attachEventHandlers() {
+    document.getElementById('gameSelect').addEventListener('change', updateFavouredTeams);
+    document.getElementById('optimizeBtn').addEventListener('click', optimizeShowdown);
+}
+
+/** Initialize page. */
+async function init() {
+    glpk = await GLPKModule();
+    await loadAllCsv();
+    populateGameSelect();
+    attachEventHandlers();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    init().catch(err => {
+        console.error('Initialization error:', err);
+        const status = document.getElementById('status');
+        if (status) status.textContent = 'Initialization error: ' + err.message;
+    });
+});
