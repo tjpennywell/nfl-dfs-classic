@@ -3,10 +3,9 @@ const BASE = "data/";
 
 const state = {
   games: [],
-  players: [],
-  rec: [],
   pass: [],
-  rush: [],
+  rushOff: [],
+  rushDef: [],
 };
 
 function loadCsv(path) {
@@ -22,16 +21,15 @@ function loadCsv(path) {
   });
 }
 
-function uniq(arr) {
-  return Array.from(new Set(arr)).filter(Boolean).sort();
-}
-
-function normalizeTeam(t) {
-  if (!t) return t;
+const norm = (t) => {
+  if (!t) return "";
   const x = String(t).trim().toUpperCase();
   if (x === "LAR") return "LA";
-  if (x === "LAC") return "LAC";
   return x;
+};
+
+function uniq(arr) {
+  return Array.from(new Set(arr.map(norm))).filter(Boolean).sort();
 }
 
 function setOptions(sel, values, includeBlank = false) {
@@ -50,25 +48,25 @@ function setOptions(sel, values, includeBlank = false) {
   });
 }
 
-function heatColor(val) {
-  const v = Math.max(-1, Math.min(1, Number(val) || 0));
-  // dark neutral -> green for positive -> red for negative
+// Dark heatmap colors
+function heatColor(v) {
+  v = Number(v);
+  if (!Number.isFinite(v)) v = 0;
+  v = Math.max(-1, Math.min(1, v));
   if (v >= 0) {
     const g = Math.floor(80 + 175 * v);
-    const r = Math.floor(30 + 40 * (1 - v));
-    const b = Math.floor(30 + 40 * (1 - v));
+    const r = Math.floor(25 + 50 * (1 - v));
+    const b = Math.floor(25 + 50 * (1 - v));
     return `rgb(${r},${g},${b})`;
   } else {
     const a = Math.abs(v);
     const r = Math.floor(80 + 175 * a);
-    const g = Math.floor(30 + 40 * (1 - a));
-    const b = Math.floor(30 + 40 * (1 - a));
+    const g = Math.floor(25 + 50 * (1 - a));
+    const b = Math.floor(25 + 50 * (1 - a));
     return `rgb(${r},${g},${b})`;
   }
 }
-
 function textColor(bg) {
-  // bg like "rgb(r,g,b)"
   const m = bg.match(/\d+/g);
   if (!m) return "#fff";
   const r = +m[0], g = +m[1], b = +m[2];
@@ -76,45 +74,30 @@ function textColor(bg) {
   return lum > 120 ? "#111" : "#fff";
 }
 
-function buildRushCols() {
-  return ["Left End","Left Tackle","Left Guard","Center","Right Guard","Right Tackle","Right End"];
-}
-
-function buildPassCols() {
-  // pass file usually has short/int/deep or buckets; we’ll detect numeric cols
-  return null;
-}
-
-function getNumericCols(row) {
-  const ignore = new Set(["off_team","def_team","play_type","location","depth_bucket"]);
-  return Object.keys(row || {}).filter(k => !ignore.has(k) && typeof row[k] === "number");
-}
-
-function renderHeatmap(containerId, rows, title) {
+function renderTable(containerId, title, cols, rows, fmt = (x)=>String(x)) {
   const el = document.getElementById(containerId);
   el.innerHTML = "";
+
   const h = document.createElement("div");
   h.style.margin = "8px 0";
-  h.style.fontWeight = "700";
+  h.style.fontWeight = "800";
   h.textContent = title;
   el.appendChild(h);
 
   if (!rows.length) {
     const p = document.createElement("div");
-    p.textContent = "No data.";
+    p.textContent = "No data for this matchup.";
     el.appendChild(p);
     return;
   }
 
-  // Determine columns dynamically from numeric fields
-  const cols = getNumericCols(rows[0]);
   const table = document.createElement("table");
   table.style.width = "100%";
   table.style.borderCollapse = "collapse";
-  table.style.marginBottom = "10px";
 
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
+
   const th0 = document.createElement("th");
   th0.textContent = "Row";
   th0.style.textAlign = "left";
@@ -123,7 +106,7 @@ function renderHeatmap(containerId, rows, title) {
 
   cols.forEach(c => {
     const th = document.createElement("th");
-    th.textContent = c.replaceAll("_"," ");
+    th.textContent = c;
     th.style.padding = "6px";
     th.style.textAlign = "center";
     trh.appendChild(th);
@@ -133,24 +116,25 @@ function renderHeatmap(containerId, rows, title) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
+
   rows.forEach(r => {
     const tr = document.createElement("tr");
 
     const td0 = document.createElement("td");
-    td0.textContent = r.__label || "";
+    td0.textContent = r.label || "";
     td0.style.padding = "6px";
-    td0.style.fontWeight = "700";
+    td0.style.fontWeight = "800";
     tr.appendChild(td0);
 
     cols.forEach(c => {
       const td = document.createElement("td");
-      const v = Number(r[c] || 0);
+      const v = r[c];
       const bg = heatColor(v);
       td.style.background = bg;
       td.style.color = textColor(bg);
       td.style.padding = "6px";
       td.style.textAlign = "center";
-      td.textContent = (v*100).toFixed(1) + "%";
+      td.textContent = fmt(v);
       tr.appendChild(td);
     });
 
@@ -161,108 +145,145 @@ function renderHeatmap(containerId, rows, title) {
   el.appendChild(table);
 }
 
-function matchupRows(off, def, dataRows) {
-  const offN = normalizeTeam(off);
-  const defN = normalizeTeam(def);
-  const match = dataRows.filter(r => normalizeTeam(r.off_team) === offN && normalizeTeam(r.def_team) === defN);
+// PASS: build Short/Intermediate/Deep from heatmap_pass_matchup.csv
+function buildPass(off, def) {
+  const offT = norm(off), defT = norm(def);
+  const rows = state.pass.filter(r => norm(r.off_team) === offT && norm(r.def_team) === defT);
+  if (!rows.length) return [];
 
-  if (!match.length) return [];
+  // expected columns in file: depth_bucket + off_epa_per_att + def_epa_allowed_per_play + edge_off_minus_def
+  const bucketMap = new Map();
+  rows.forEach(r => {
+    const b = String(r.depth_bucket || "").toLowerCase();
+    if (b.includes("short")) bucketMap.set("Short", r);
+    else if (b.includes("inter")) bucketMap.set("Intermediate", r);
+    else if (b.includes("deep")) bucketMap.set("Deep", r);
+  });
 
-  // Build offense/defense/edge rows based on numeric cols aggregation
-  const cols = getNumericCols(match[0]);
-  const sum = (arr, col) => arr.reduce((a, x) => a + (Number(x[col]) || 0), 0);
+  const cols = ["Short","Intermediate","Deep"];
 
-  // If file already has OFF/DEF rows we’ll just show the matching rows
-  // Otherwise treat the matching set as “offense share” vs “def allowed” isn’t available
-  // so we show a single row.
-  if (match.length === 1) {
-    const single = {...match[0], __label: "MATCHUP"};
-    return [single];
-  }
+  const offense = { label: "OFFENSE (EPA/att)" };
+  const defense = { label: "DEFENSE (EPA allowed)" };
+  const edge   = { label: "EDGE (Off - Def)" };
 
-  // If rows include “row” label, preserve
-  if (match[0].row) {
-    return match.map(r => ({...r, __label: String(r.row)}));
-  }
+  cols.forEach(c => {
+    const r = bucketMap.get(c);
+    offense[c] = r ? Number(r.off_epa_per_att) : 0;
+    defense[c] = r ? Number(r.def_epa_allowed_per_play) : 0;
+    edge[c]    = r ? Number(r.edge_off_minus_def) : (offense[c] - defense[c]);
+  });
 
-  // Fallback: average rows
-  const avg = {};
-  cols.forEach(c => avg[c] = sum(match, c) / match.length);
-  avg.__label = "AVG";
-  return [avg];
+  return [offense, defense, edge];
+}
+
+// RUSH: build LE..RE from rush_lane_share_off/def
+function buildRush(off, def) {
+  const offT = norm(off), defT = norm(def);
+
+  const offRow = state.rushOff.find(r => norm(r.off_team || r.team) === offT);
+  const defRow = state.rushDef.find(r => norm(r.def_team || r.team) === defT);
+
+  if (!offRow || !defRow) return [];
+
+  // Try multiple possible column namings
+  const laneCols = [
+    ["Left End","LE"], ["Left Tackle","LT"], ["Left Guard","LG"], ["Center","C"],
+    ["Right Guard","RG"], ["Right Tackle","RT"], ["Right End","RE"]
+  ];
+
+  const offense = { label: "OFFENSE (share %)" };
+  const defense = { label: "DEFENSE (allowed %)" };
+  const edge    = { label: "EDGE (Off - Def)" };
+
+  laneCols.forEach(([nice, short]) => {
+    // possible keys: "LE" or "left_end" or "Left End"
+    const keys = [
+      nice, short,
+      nice.toLowerCase().replaceAll(" ","_"),
+      short.toLowerCase()
+    ];
+
+    const getVal = (row) => {
+      for (const k of keys) {
+        if (row[k] !== undefined) return Number(row[k]);
+      }
+      return 0;
+    };
+
+    const o = getVal(offRow);
+    const d = getVal(defRow);
+
+    offense[nice] = o;
+    defense[nice] = d;
+    edge[nice] = o - d;
+  });
+
+  return [offense, defense, edge];
 }
 
 async function init() {
-  // Grab DOM
   const gameSelect = document.getElementById("gameSelect");
-  const styleSelect = document.getElementById("styleSelect");
   const offTeam = document.getElementById("offenseTeam");
   const defTeam = document.getElementById("defenseTeam");
   const analyzeBtn = document.getElementById("analyzeBtn");
   const summaryEl = document.getElementById("summaryText");
 
-  // Load CSVs
   try {
-    const [games, players, rec, pass, rush] = await Promise.all([
+    const [games, pass, rushOff, rushDef] = await Promise.all([
       loadCsv(BASE + "games_classic.csv"),
-      loadCsv(BASE + "players_classic.csv"),
-      loadCsv(BASE + "optimal_lineup_rec.csv"),
       loadCsv(BASE + "heatmap_pass_matchup.csv"),
-      loadCsv(BASE + "heatmap_rush_proxy.csv"),
+      loadCsv(BASE + "rush_lane_share_off.csv"),
+      loadCsv(BASE + "rush_lane_share_def.csv"),
     ]);
-
     state.games = games;
-    state.players = players;
-    state.rec = rec;
     state.pass = pass;
-    state.rush = rush;
-
+    state.rushOff = rushOff;
+    state.rushDef = rushDef;
   } catch (e) {
     console.error(e);
-    alert("CSV load failed. Check /data paths and file names. See console for details.");
+    alert("CSV load failed. Check file names in /data (games, pass, rush_off, rush_def).");
     return;
   }
 
-  // Populate game dropdown
-  const gameLabels = state.games
-    .map(g => g.game || g.Game || g.matchup || g.Matchup || `${g.away_team || g.Away}@${g.home_team || g.Home}`)
-    .filter(Boolean);
+  // Populate games
+  const gameLabels = state.games.map(g => {
+    const a = norm(g.away_team || g.Away);
+    const h = norm(g.home_team || g.Home);
+    return (a && h) ? `${a}@${h}` : (g.game || g.Game || "");
+  }).filter(Boolean);
 
   setOptions(gameSelect, gameLabels, true);
 
-  // Style dropdown (basic)
-  setOptions(styleSelect, ["Classic","Showdown","Matchup"], false);
-
-  // Populate team dropdowns from heatmaps + games
-  const teams = uniq([
-    ...state.games.flatMap(g => [g.home_team, g.away_team, g.Home, g.Away]),
-    ...state.pass.flatMap(r => [r.off_team, r.def_team]),
-    ...state.rush.flatMap(r => [r.off_team, r.def_team]),
-  ].map(normalizeTeam));
-
+  // Teams from games
+  const teams = uniq(state.games.flatMap(g => [g.home_team, g.away_team, g.Home, g.Away]));
   setOptions(offTeam, teams, true);
   setOptions(defTeam, teams, true);
 
-  // Default: pick first teams if blank
-  if (!offTeam.value && teams[0]) offTeam.value = teams[0];
-  if (!defTeam.value && teams[0]) defTeam.value = teams[0];
+  // Default selection
+  if (teams[0]) offTeam.value = teams[0];
+  if (teams[1]) defTeam.value = teams[1] || teams[0];
 
   function analyze() {
     const off = offTeam.value;
     const def = defTeam.value;
 
-    const passRows = matchupRows(off, def, state.pass).map(r => ({...r, __label: r.__label || "PASS"}));
-    const rushRows = matchupRows(off, def, state.rush).map(r => ({...r, __label: r.__label || "RUSH"}));
+    const passRows = buildPass(off, def);
+    const rushRows = buildRush(off, def);
 
-    renderHeatmap("passHeatmap", passRows, `Pass Heatmap — ${off} vs ${def}`);
-    renderHeatmap("rushHeatmap", rushRows, `Rush Heatmap — ${off} vs ${def}`);
+    renderTable("passHeatmap", `Pass Heatmap — ${off} vs ${def}`, ["Short","Intermediate","Deep"], passRows,
+      (v)=>Number(v).toFixed(3)
+    );
 
-    summaryEl.textContent = `Showing matchup for ${off} vs ${def}. (Next: we’ll add edge rows + optimizer back once dropdowns are confirmed.)`;
+    const rushCols = ["Left End","Left Tackle","Left Guard","Center","Right Guard","Right Tackle","Right End"];
+    renderTable("rushHeatmap", `Rush Heatmap — ${off} vs ${def}`, rushCols, rushRows,
+      (v)=>(Number(v)*100).toFixed(1) + "%"
+    );
+
+    summaryEl.textContent =
+      `Matchup: ${off} vs ${def}. Pass table is EPA (off/def/edge) by depth. Rush table is lane share (off/def/edge).`;
   }
 
   analyzeBtn.addEventListener("click", analyze);
-
-  // Auto render once loaded
   analyze();
 }
 
