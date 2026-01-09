@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NFL DFS Dashboard</title>
+    <!-- Reuse the dark theme styles from the optimizer -->
+    <link rel="stylesheet" href="../optimizer/optimizer.css">
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <!-- Dashboard logic -->
+    <script type="module" src="dashboard.js"></script>
+</head>
+<body>
+    <header>
+        <h1>NFL DFS Dashboard</h1>
+    </header>
+    <main>
+        <!-- Controls for salary cap, team limits, and game/style -->
+        <section id="controls">
+            <label>
+                Salary Cap:
+                <input type="number" id="salaryCap" value="50000" min="0" step="100">
+            </label>
+            <label>
+                Max Players per Team:
+                <input type="number" id="maxTeam" value="4" min="1" step="1">
+            </label>
+            <label>
+                Game:
+                <select id="gameSelect"></select>
+            </label>
+            <label>
+                Style:
+                <select id="styleSelect">
+                    <option value="classic">Classic</option>
+                    <option value="pass">Pass</option>
+                    <option value="rush">Rush</option>
+                </select>
+            </label>
+            <button id="optimizeBtn">Optimize Lineup</button>
+        </section>
+        <!-- Lineup tables -->
+        <section id="lineups" style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            <div id="recommended" style="flex: 1 1 300px;">
+                <h2>Recommended Lineup</h2>
+                <table id="recLineup" class="lineup-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Position</th>
+                            <th>Team</th>
+                            <th>Salary</th>
+                            <th>Projection</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                    <tfoot>
+                        <tr id="recTotals"></tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div id="optimized" style="flex: 1 1 300px;">
+                <h2>Optimized Lineup</h2>
+                <table id="optLineup" class="lineup-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Position</th>
+                            <th>Team</th>
+                            <th>Salary</th>
+                            <th>Projection</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                    <tfoot>
+                        <tr id="optTotals"></tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+        <!-- Heatmap and matchup analysis -->
+        <section id="heatmaps">
+            <h2>Matchup Analysis</h2>
+            <div id="heatmapControls">
+                <label>
+                    Offense Team:
+                    <select id="offTeamSelect"></select>
+                </label>
+                <label>
+                    Defense Team:
+                    <select id="defTeamSelect"></select>
+                </label>
+                <button id="analyzeBtn">Analyze Matchup</button>
+            </div>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                <div style="flex: 1 1 300px;">
+                    <h3>Pass Heatmap</h3>
+                    <table id="passTable" class="heatmap-table">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <th>Left End</th>
+                                <th>Left Tackle</th>
+                                <th>Left Guard</th>
+                                <th>Center</th>
+                                <th>Right Guard</th>
+                                <th>Right Tackle</th>
+                                <th>Right End</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div style="flex: 1 1 300px;">
+                    <h3>Rush Heatmap</h3>
+                    <table id="rushTable" class="heatmap-table">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <th>Left End</th>
+                                <th>Left Tackle</th>
+                                <th>Left Guard</th>
+                                <th>Center</th>
+                                <th>Right Guard</th>
+                                <th>Right Tackle</th>
+                                <th>Right End</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="matchupSummary" style="margin-top: 1rem;">
+                <h3>Summary</h3>
+                <p id="teamSummary">Select teams and click Analyze to see the matchup summary.</p>
+            </div>
+        </section>
+        <div id="status"></div>
+    </main>
+</body>
+</html>
