@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Showdown Optimizer</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Showdown Optimizer</h1>
+    <p>Optimize DK Showdown lineups with CPT and FLEX control.</p>
+  </header>
+
+  <main class="container">
+    <div id="error-banner" class="error-banner" style="display:none"></div>
+
+    <section class="panel">
+      <h2>Controls</h2>
+      <div class="controls">
+        <div>
+          <label for="salary-cap">Salary Cap</label>
+          <input id="salary-cap" type="number" value="50000" />
+        </div>
+        <div>
+          <label for="team-cap">Max Players Per Team</label>
+          <input id="team-cap" type="number" value="5" />
+        </div>
+        <div>
+          <label for="game-select">Game</label>
+          <select id="game-select"></select>
+        </div>
+        <div>
+          <label for="environment">Environment</label>
+          <select id="environment">
+            <option value="Neutral">Neutral</option>
+            <option value="Shootout">Shootout</option>
+            <option value="Blowout">Blowout</option>
+            <option value="Ugly/Defensive">Ugly/Defensive</option>
+          </select>
+        </div>
+        <div id="favored-wrap" style="display:none">
+          <label for="favored-team">Favored Team</label>
+          <select id="favored-team"></select>
+        </div>
+      </div>
+      <div class="action-row" style="margin-top:16px;">
+        <button class="btn-primary" id="optimize-btn">Optimize Showdown</button>
+        <a class="btn-secondary" href="index.html">Back Home</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Optimized Lineup</h2>
+      <table class="table" id="optimized-table">
+        <thead>
+          <tr>
+            <th>Slot</th>
+            <th>Name</th>
+            <th>Team</th>
+            <th>Salary</th>
+            <th>Proj</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3">Totals</td>
+            <td id="opt-total-salary">0</td>
+            <td id="opt-total-proj">0</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="assets/utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/glpk.js@0.19.0/dist/glpk.min.js" onerror="window.utils && window.utils.showError('GLPK failed to load. Please refresh or check your connection.');"></script>
+  <script src="assets/optimizer_showdown.js"></script>
+</body>
+</html>

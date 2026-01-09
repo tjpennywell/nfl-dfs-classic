@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matchup Analysis</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Matchup Analysis</h1>
+    <p>Explore pass depth and rush lane advantages for any matchup.</p>
+  </header>
+
+  <main class="container">
+    <div id="error-banner" class="error-banner" style="display:none"></div>
+
+    <section class="panel">
+      <h2>Matchup Controls</h2>
+      <div class="controls">
+        <div>
+          <label for="off-team">Offense Team</label>
+          <select id="off-team"></select>
+        </div>
+        <div>
+          <label for="def-team">Defense Team</label>
+          <select id="def-team"></select>
+        </div>
+      </div>
+      <div class="action-row" style="margin-top:16px;">
+        <button class="btn-primary" id="analyze-btn">Analyze Matchup</button>
+        <a class="btn-secondary" href="index.html">Back Home</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Pass Heatmap</h2>
+      <div id="pass-message" class="notice" style="display:none"></div>
+      <table class="table heatmap-table" id="pass-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Short</th>
+            <th>Intermediate</th>
+            <th>Deep</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Rush Heatmap</h2>
+      <div id="rush-message" class="notice" style="display:none"></div>
+      <table class="table heatmap-table" id="rush-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Left End</th>
+            <th>Left Tackle</th>
+            <th>Left Guard</th>
+            <th>Center</th>
+            <th>Right Guard</th>
+            <th>Right Tackle</th>
+            <th>Right End</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Summary</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <h3>Best Pass Depth Edge</h3>
+          <p id="best-pass">--</p>
+        </div>
+        <div class="summary-card">
+          <h3>Best Rush Lane Edge</h3>
+          <p id="best-rush">--</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="assets/utils.js"></script>
+  <script src="assets/matchup.js"></script>
+</body>
+</html>
