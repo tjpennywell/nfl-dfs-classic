@@ -2,30 +2,8 @@
   const state = {
     games: [],
     players: [],
+    salarySource: null,
   };
-
-  function parseGames(rows) {
-    return rows
-      .map((row) => {
-        const home = utils.normalizeTeam(row.home_team || row.Home || row.home || row.HOME);
-        const away = utils.normalizeTeam(row.away_team || row.Away || row.away || row.AWAY);
-        if (!home || !away) return null;
-        return { home, away, label: `${away}@${home}` };
-      })
-      .filter(Boolean);
-  }
-
-  function parsePlayers(rows) {
-    return rows
-      .map((row) => ({
-        name: row.name || row.Name,
-        pos: String(row.pos || row.Pos || "").toUpperCase(),
-        team: utils.normalizeTeam(row.team || row.Team),
-        salary: utils.safeNumber(row.salary || row.Salary),
-        proj: utils.safeNumber(row.proj || row.Proj),
-      }))
-      .filter((player) => player.name && player.pos && player.team);
-  }
 
   function populateGames() {
     const select = document.getElementById("game-select");
@@ -57,8 +35,8 @@
   function handleEnvironmentChange() {
     const env = document.getElementById("environment").value;
     const wrap = document.getElementById("favored-wrap");
-    wrap.style.display = env === "Blowout" ? "block" : "none";
-    if (env === "Blowout") {
+    wrap.style.display = env === "Blowout/Ugly" ? "block" : "none";
+    if (env === "Blowout/Ugly") {
       updateFavoredTeams();
     }
   }
@@ -222,20 +200,30 @@
     renderOptimized(lineup);
   }
 
+  function renderSourceNote() {
+    const note = document.getElementById("data-source");
+    if (note && state.salarySource) {
+      note.style.display = "block";
+      note.textContent = `Salary data source: ${state.salarySource.label}`;
+    }
+  }
+
   async function init() {
     utils.initDebugBar();
     try {
-      const [games, players] = await Promise.all([
-        utils.parseCsv("data/games_classic.csv"),
-        utils.parseCsv("data/players_classic.csv"),
+      const [gamesData, salaryData] = await Promise.all([
+        utils.loadScoreboard(),
+        utils.loadSalaries(),
       ]);
-      state.games = parseGames(games);
-      state.players = parsePlayers(players);
-      utils.logDebug(`Loaded ${state.games.length} games`);
-      utils.logDebug(`Loaded ${state.players.length} players`);
+      state.games = gamesData;
+      state.players = salaryData.players;
+      state.salarySource = salaryData.source;
+      utils.logDebug(`Loaded ${state.games.length} games from ESPN`);
+      utils.logDebug(`Loaded ${state.players.length} players from salary feed`);
       populateGames();
+      renderSourceNote();
     } catch (err) {
-      utils.showError("Failed to load data files. Check console for details.");
+      utils.showError("Failed to load live data feeds. Check console for details.");
       utils.logDebug(`Data load error: ${err}`);
     }
 

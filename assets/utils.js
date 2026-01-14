@@ -1,49 +1,34 @@
-// Case-insensitive column getter (handles Game vs game, Home vs home, etc.)
-function getCol(row, ...keys) {
-  if (!row) return undefined;
-  const map = {};
-  for (const k of Object.keys(row)) map[k.toLowerCase()] = row[k];
-  for (const k of keys) {
-    const v = map[String(k).toLowerCase()];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return undefined;
-}
-
-function normTeam(t) {
-  if (!t) return "";
-  const x = String(t).trim().toUpperCase();
-  if (x === "LAR") return "LA";   // your key mapping request
-  return x;
-}
-
-// Map your depth buckets to the app’s buckets
-function normDepthBucket(b) {
-  const x = String(b || "").trim().toLowerCase();
-  if (x === "short") return "Short";
-  if (x === "medium" || x === "intermediate" || x === "mid") return "Intermediate";
-  if (x === "deep") return "Deep";
-  return "";
-}
-
-// Normalize a game row from your games_classic.csv
-function normGameRow(g) {
-  const game = getCol(g, "Game", "game");
-  const home = normTeam(getCol(g, "Home", "home", "home_team"));
-  const away = normTeam(getCol(g, "Away", "away", "away_team"));
-  return { game, home, away };
-}
-
 (function () {
   const utils = {};
   const debugMessages = [];
   let debugVisible = true;
 
+  const TEAM_ALIASES = {
+    LAR: "LA",
+    STL: "LA",
+    JAC: "JAX",
+    WAS: "WSH",
+    OAK: "LV",
+    SD: "LAC",
+  };
+
+  const SALARY_SOURCES = [
+    {
+      label: "DraftKings (community mirror)",
+      url: "https://raw.githubusercontent.com/rotowire/dk-nfl-salaries/master/dk_nfl_salaries.csv",
+      type: "draftkings",
+    },
+    {
+      label: "DraftKings (backup mirror)",
+      url: "https://raw.githubusercontent.com/markuswarner/dk-nfl-salaries/main/DKSalaries.csv",
+      type: "draftkings",
+    },
+  ];
+
   utils.normalizeTeam = function (team) {
     if (!team) return "";
     const cleaned = String(team).trim().toUpperCase();
-    if (cleaned === "LAR") return "LA";
-    return cleaned;
+    return TEAM_ALIASES[cleaned] || cleaned;
   };
 
   utils.logDebug = function (message) {
@@ -81,10 +66,33 @@ function normGameRow(g) {
     container.style.display = "block";
   };
 
-  utils.parseCsv = function (url) {
+  utils.safeNumber = function (value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  utils.formatNumber = function (value, digits = 2) {
+    return Number(value).toFixed(digits);
+  };
+
+  utils.createCell = function (text, className) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  };
+
+  utils.fetchJson = async function (url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status}) for ${url}`);
+    }
+    return response.json();
+  };
+
+  utils.parseCsvText = function (text) {
     return new Promise((resolve, reject) => {
-      Papa.parse(url, {
-        download: true,
+      Papa.parse(text, {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
@@ -100,6 +108,97 @@ function normGameRow(g) {
     });
   };
 
+  utils.fetchCsv = async function (url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`CSV request failed (${response.status}) for ${url}`);
+    }
+    const text = await response.text();
+    return utils.parseCsvText(text);
+  };
+
+  utils.fetchFirstCsv = async function (sources) {
+    let lastError = null;
+    for (const source of sources) {
+      try {
+        const rows = await utils.fetchCsv(source.url);
+        return { rows, source };
+      } catch (err) {
+        lastError = err;
+        utils.logDebug(`Salary source failed: ${source.label}`);
+      }
+    }
+    throw lastError || new Error("No salary sources available");
+  };
+
+  utils.loadScoreboard = async function () {
+    const data = await utils.fetchJson(
+      "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    );
+    const games = [];
+    (data.events || []).forEach((event) => {
+      const competition = event.competitions && event.competitions[0];
+      if (!competition || !competition.competitors) return;
+      const home = competition.competitors.find((team) => team.homeAway === "home");
+      const away = competition.competitors.find((team) => team.homeAway === "away");
+      if (!home || !away) return;
+      const homeAbbr = utils.normalizeTeam(home.team.abbreviation);
+      const awayAbbr = utils.normalizeTeam(away.team.abbreviation);
+      games.push({
+        home: homeAbbr,
+        away: awayAbbr,
+        label: `${awayAbbr}@${homeAbbr}`,
+      });
+    });
+    return games;
+  };
+
+  function parseGameInfo(gameInfo) {
+    if (!gameInfo) return null;
+    const raw = String(gameInfo).split(" ")[0];
+    if (!raw || !raw.includes("@")) return null;
+    const [away, home] = raw.split("@");
+    return {
+      away: utils.normalizeTeam(away),
+      home: utils.normalizeTeam(home),
+      label: `${utils.normalizeTeam(away)}@${utils.normalizeTeam(home)}`,
+    };
+  }
+
+  function parseSalaryRow(row) {
+    const name = row.Name || row.name || row.Player || row.player || row.Nickname || row.PlayerName;
+    const pos = row.Position || row.position || row.Pos || row.pos || row.RosterPosition;
+    const team = row.TeamAbbrev || row.team || row.Team || row.Tm;
+    const salary = row.Salary || row.salary || row.Sal;
+    const avg =
+      row.AvgPointsPerGame ||
+      row.AvgPoints ||
+      row.FPPG ||
+      row.FantasyPointsPerGame ||
+      row.Proj;
+    if (!name || !pos || !team || !salary) return null;
+
+    const normalizedPos = String(pos).toUpperCase().replace("D/ST", "DST");
+    const normalizedTeam = utils.normalizeTeam(team);
+    const projection = utils.safeNumber(avg) || utils.safeNumber(salary) / 1000 * 3;
+    const gameInfo = parseGameInfo(row["Game Info"] || row.GameInfo || row.game);
+
+    return {
+      name: String(name).trim(),
+      pos: normalizedPos,
+      team: normalizedTeam,
+      salary: utils.safeNumber(salary),
+      proj: projection,
+      gameInfo,
+    };
+  }
+
+  utils.loadSalaries = async function () {
+    const { rows, source } = await utils.fetchFirstCsv(SALARY_SOURCES);
+    const players = rows.map(parseSalaryRow).filter(Boolean);
+    return { players, source };
+  };
+
   utils.applyEnvironment = function (players, env, gameTeams, favoredTeam) {
     return players.map((player) => {
       const updated = { ...player };
@@ -110,29 +209,31 @@ function normGameRow(g) {
       if (env === "Shootout") {
         if (pos === "QB") multiplier = 1.08;
         if (pos === "WR") multiplier = 1.08;
-        if (pos === "TE") multiplier = 1.06;
-        if (pos === "RB") multiplier = 0.98;
-        if (pos === "DST") multiplier = 0.92;
-      } else if (env === "Ugly/Defensive") {
-        if (pos === "QB") multiplier = 0.92;
-        if (pos === "WR") multiplier = 0.92;
-        if (pos === "TE") multiplier = 0.94;
-        if (pos === "RB") multiplier = 1.05;
-        if (pos === "DST") multiplier = 1.08;
-      } else if (env === "Blowout" && gameTeams && favoredTeam) {
-        const favored = utils.normalizeTeam(favoredTeam);
-        if (team === favored) {
-          if (pos === "RB") multiplier = 1.1;
-          if (pos === "DST") multiplier = 1.1;
-          if (pos === "WR") multiplier = 1.03;
-          if (pos === "TE") multiplier = 0.98;
-          if (pos === "QB") multiplier = 1.0;
-        } else if (gameTeams.includes(team)) {
-          if (pos === "QB") multiplier = 1.03;
-          if (pos === "WR") multiplier = 1.03;
-          if (pos === "TE") multiplier = 1.01;
-          if (pos === "RB") multiplier = 0.92;
-          if (pos === "DST") multiplier = 0.85;
+        if (pos === "TE") multiplier = 1.05;
+        if (pos === "RB") multiplier = 0.99;
+        if (pos === "DST") multiplier = 0.94;
+      } else if (env === "Blowout/Ugly") {
+        if (gameTeams && favoredTeam) {
+          const favored = utils.normalizeTeam(favoredTeam);
+          if (team === favored) {
+            if (pos === "RB") multiplier = 1.12;
+            if (pos === "DST") multiplier = 1.1;
+            if (pos === "WR") multiplier = 0.98;
+            if (pos === "TE") multiplier = 0.98;
+            if (pos === "QB") multiplier = 0.97;
+          } else if (gameTeams.includes(team)) {
+            if (pos === "QB") multiplier = 0.95;
+            if (pos === "WR") multiplier = 0.93;
+            if (pos === "TE") multiplier = 0.95;
+            if (pos === "RB") multiplier = 0.9;
+            if (pos === "DST") multiplier = 0.85;
+          }
+        } else {
+          if (pos === "QB") multiplier = 0.95;
+          if (pos === "WR") multiplier = 0.95;
+          if (pos === "TE") multiplier = 0.96;
+          if (pos === "RB") multiplier = 1.05;
+          if (pos === "DST") multiplier = 1.08;
         }
       }
 
@@ -149,11 +250,6 @@ function normGameRow(g) {
       .filter(Boolean);
   };
 
-  utils.safeNumber = function (value) {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : 0;
-  };
-
   utils.getGlpkInstance = async function () {
     if (window.glpk) return window.glpk;
     if (window.GLPK) {
@@ -167,17 +263,6 @@ function normGameRow(g) {
     }
     utils.showError("GLPK failed to load. Please check your connection.");
     return null;
-  };
-
-  utils.formatNumber = function (value, digits = 2) {
-    return Number(value).toFixed(digits);
-  };
-
-  utils.createCell = function (text, className) {
-    const td = document.createElement("td");
-    td.textContent = text;
-    if (className) td.className = className;
-    return td;
   };
 
   window.utils = utils;
